@@ -1,5 +1,6 @@
 const express = require('express');
 const connectToDatabase = require('./config/database');
+const cloudinary = require('./config/cloudinary');
 const dotenv = require('dotenv');
 dotenv.config({ path: './config/.env' });
 
