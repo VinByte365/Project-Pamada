@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -21,18 +21,10 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['admin', 'grower'],
-    default: 'farmer'
+    default: 'grower'
   },
   phone: {
     type: String
-  },
-  farm_details: {
-    farm_name: String,
-    location: String,
-    coordinates: {
-      lat: Number,
-      lng: Number
-    }
   },
   preferences: {
     notification_enabled: {
@@ -54,10 +46,9 @@ const userSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password_hash')) return next();
+userSchema.pre('save', async function() {
+  if (!this.isModified('password_hash')) return;
   this.password_hash = await bcrypt.hash(this.password_hash, 12);
-  next();
 });
 
 // Method to compare passwords
