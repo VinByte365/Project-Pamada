@@ -1,32 +1,57 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiRequest } from '../utils/api';
 
 const AuthContext = createContext(null);
 
-const STORAGE_KEY = '@pamada_user';
-
-const DEFAULT_USER = {
-  id: 'demo-user',
-  full_name: 'Melvin Catuera',
-  email: 'farmer@pamada.app',
-  role: 'grower',
-};
+const USER_KEY = '@pamada_user';
+const TOKEN_KEY = '@pamada_token';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     const load = async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
+        const [rawUser, storedToken] = await Promise.all([
+          AsyncStorage.getItem(USER_KEY),
+          AsyncStorage.getItem(TOKEN_KEY),
+        ]);
+
+        let hydrated = false;
+        if (storedToken) {
+          setToken(storedToken);
+          try {
+            const me = await apiRequest('/api/v1/auth/me', {
+              method: 'GET',
+              token: storedToken,
+            });
+            if (isMounted) {
+              setUser(me?.data?.user || null);
+              await AsyncStorage.setItem(USER_KEY, JSON.stringify(me?.data?.user || null));
+            }
+            hydrated = true;
+          } catch (error) {
+            await AsyncStorage.multiRemove([USER_KEY, TOKEN_KEY]);
+            if (isMounted) {
+              setUser(null);
+              setToken(null);
+            }
+          }
+        }
+
+        if (!hydrated && rawUser && storedToken) {
+          const parsed = JSON.parse(rawUser);
           if (isMounted) setUser(parsed);
         }
       } catch (error) {
-        if (isMounted) setUser(DEFAULT_USER);
+        if (isMounted) {
+          setUser(null);
+          setToken(null);
+        }
       } finally {
         if (isMounted) setInitializing(false);
       }
@@ -41,33 +66,76 @@ export function AuthProvider({ children }) {
     if (!email || !password) {
       throw new Error('Email and password are required.');
     }
-    const nextUser = {
-      ...DEFAULT_USER,
-      email,
-      full_name: email.split('@')[0]?.replace(/\./g, ' ') || DEFAULT_USER.full_name,
-    };
+    const response = await apiRequest('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    const nextUser = response?.data?.user;
+    const nextToken = response?.data?.token;
+
+    if (!nextUser || !nextToken) {
+      throw new Error('Login failed. Please check your credentials.');
+    }
+
     setUser(nextUser);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
+    setToken(nextToken);
+    await AsyncStorage.multiSet([
+      [USER_KEY, JSON.stringify(nextUser)],
+      [TOKEN_KEY, nextToken],
+    ]);
   };
 
   const register = async ({ email, password, full_name, role, phone }) => {
     if (!email || !password || !full_name) {
       throw new Error('Please complete all required fields.');
     }
-    const nextUser = {
-      id: `user-${Date.now()}`,
-      full_name,
-      email,
-      role: role || 'grower',
-      phone,
-    };
+    const response = await apiRequest('/api/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password,
+        full_name,
+        role: role || 'grower',
+        phone,
+      }),
+    });
+
+    const nextUser = response?.data?.user;
+    const nextToken = response?.data?.token;
+
+    if (!nextUser || !nextToken) {
+      throw new Error('Registration failed. Please try again.');
+    }
+
     setUser(nextUser);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
+    setToken(nextToken);
+    await AsyncStorage.multiSet([
+      [USER_KEY, JSON.stringify(nextUser)],
+      [TOKEN_KEY, nextToken],
+    ]);
   };
 
   const logout = async () => {
     setUser(null);
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    setToken(null);
+    await AsyncStorage.multiRemove([USER_KEY, TOKEN_KEY]);
+  };
+
+  const refreshUser = async () => {
+    if (!token) return null;
+    const me = await apiRequest('/api/v1/auth/me', {
+      method: 'GET',
+      token,
+    });
+    const nextUser = me?.data?.user || null;
+    setUser(nextUser);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    return nextUser;
+  };
+
+  const setCurrentUser = async (nextUser) => {
+    setUser(nextUser || null);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(nextUser || null));
   };
 
   const value = useMemo(
@@ -77,9 +145,12 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      refreshUser,
+      setCurrentUser,
       isAuthenticated: Boolean(user),
+      token,
     }),
-    [user, initializing]
+    [user, initializing, token]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

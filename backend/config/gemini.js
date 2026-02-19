@@ -2,18 +2,25 @@
  * Google Gemini API Configuration
  * Handles initialization and configuration of Gemini API client
  */
-
+const dotenv = require('dotenv');
+dotenv.config({ path: './config/.env' });
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const apiKey = process.env.GEMINI_API_KEY;
+const defaultModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+
+// Initialize Gemini API lazily to avoid crashing when key is missing
+const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
 /**
  * Get Gemini model instance
  * @param {string} modelName - Model name (default: gemini-pro)
  * @returns {object} Gemini model instance
  */
-const getGeminiModel = (modelName = 'gemini-pro') => {
+const getGeminiModel = (modelName = defaultModel) => {
+  if (!genAI) {
+    throw new Error('Gemini API key is missing. Set GEMINI_API_KEY in backend/config/.env');
+  }
   return genAI.getGenerativeModel({ model: modelName });
 };
 

@@ -1,25 +1,51 @@
 const Scan = require('../models/scan');
 const Plant = require('../models/plant');
+const mongoose = require('mongoose');
 const { uploadImage, generateThumbnail } = require('../services/imageService');
-const { processScanAsync } = require('../services/scanAnalysisService');
+const { processScanAsync, processScanAnalysis } = require('../services/scanAnalysisService');
+const mlService = require('../services/mlService');
 const asyncHandler = require('../utils/controllerWrapper');
+
+async function resolveUserPlant(plantIdentifier, userId, options = {}) {
+  const { fallbackToLatest = false } = options;
+
+  if (plantIdentifier) {
+    const plantQuery = [{ plant_id: plantIdentifier }];
+    if (mongoose.Types.ObjectId.isValid(plantIdentifier)) {
+      plantQuery.unshift({ _id: plantIdentifier });
+    }
+
+    const plant = await Plant.findOne({
+      owner_id: userId,
+      $or: plantQuery
+    });
+
+    if (plant) {
+      return plant;
+    }
+  }
+
+  if (!fallbackToLatest) {
+    return null;
+  }
+
+  return Plant.findOne({ owner_id: userId }).sort({ createdAt: -1 });
+}
 
 // @desc    Create new scan
 // @route   POST /api/v1/scans
 // @access  Private
 exports.createScan = asyncHandler(async (req, res) => {
   const { plant_id } = req.body;
+  const syncProcessing = String(req.query.sync || '').toLowerCase() === 'true';
 
-  // Verify plant belongs to user
-  const plant = await Plant.findOne({
-    _id: plant_id,
-    owner_id: req.user.id
-  });
+  // Resolve plant by Mongo _id or business plant_id, fallback to latest owned plant.
+  const plant = await resolveUserPlant(plant_id, req.user.id, { fallbackToLatest: true });
 
   if (!plant) {
     return res.status(404).json({
       success: false,
-      error: 'Plant not found'
+      error: 'Plant not found. Please create a plant profile first.'
     });
   }
 
@@ -62,6 +88,28 @@ exports.createScan = asyncHandler(async (req, res) => {
   plant.current_status.last_scan_date = new Date();
   await plant.save();
 
+  if (syncProcessing) {
+    try {
+      const updatedScan = await processScanAnalysis(scan._id.toString(), req.file.buffer);
+      return res.status(201).json({
+        success: true,
+        data: {
+          scan: updatedScan
+        },
+        message: 'Scan created and analyzed successfully.'
+      });
+    } catch (error) {
+      console.error('Sync scan analysis failed:', error);
+      return res.status(201).json({
+        success: true,
+        data: {
+          scan
+        },
+        message: 'Scan created. Analysis will be processed shortly.'
+      });
+    }
+  }
+
   // Process scan analysis asynchronously
   processScanAsync(scan._id.toString()).catch(err => {
     console.error('Error processing scan analysis:', err);
@@ -76,6 +124,19 @@ exports.createScan = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Check ML service health
+// @route   GET /api/v1/scans/ml-health
+// @access  Private
+exports.getMlHealth = asyncHandler(async (req, res) => {
+  const healthy = await mlService.healthCheck();
+  res.status(200).json({
+    success: true,
+    data: {
+      healthy
+    }
+  });
+});
+
 // @desc    Get all scans
 // @route   GET /api/v1/scans
 // @access  Private
@@ -86,11 +147,7 @@ exports.getScans = asyncHandler(async (req, res) => {
   const query = { user_id: req.user.id };
 
   if (plant_id) {
-    // Verify plant belongs to user
-    const plant = await Plant.findOne({
-      _id: plant_id,
-      owner_id: req.user.id
-    });
+    const plant = await resolveUserPlant(plant_id, req.user.id);
 
     if (!plant) {
       return res.status(404).json({
@@ -99,7 +156,7 @@ exports.getScans = asyncHandler(async (req, res) => {
       });
     }
 
-    query.plant_id = plant_id;
+    query.plant_id = plant._id;
   }
 
   if (disease_detected !== undefined) {
@@ -247,11 +304,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
   const { plantId } = req.params;
   const { page = 1, limit = 10 } = req.query;
 
-  // Verify plant belongs to user
-  const plant = await Plant.findOne({
-    _id: plantId,
-    owner_id: req.user.id
-  });
+  const plant = await resolveUserPlant(plantId, req.user.id);
 
   if (!plant) {
     return res.status(404).json({
@@ -263,7 +316,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const scans = await Scan.find({
-    plant_id: plantId,
+    plant_id: plant._id,
     user_id: req.user.id
   })
     .sort({ createdAt: -1 })
@@ -271,7 +324,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
     .limit(parseInt(limit));
 
   const total = await Scan.countDocuments({
-    plant_id: plantId,
+    plant_id: plant._id,
     user_id: req.user.id
   });
 

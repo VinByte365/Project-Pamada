@@ -1,19 +1,21 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const http = require('http');
 const connectToDatabase = require('./config/database');
 const cloudinary = require('./config/cloudinary');
 const errorHandler = require('./middlewares/errorHandler');
 const chatbotRoutes = require('./routes/chatbot');
+const { initSocket } = require('./socket');
 const dotenv = require('dotenv');
 dotenv.config({ path: './config/.env' });
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+const server = http.createServer(app);
 
 // Connect to database
 connectToDatabase();
-
 // Middleware
 app.use(cors({
   origin: process.env.CORS_ORIGIN?.split(',') || '*',
@@ -34,6 +36,8 @@ app.use('/api/v1/scans', require('./routes/scans'));
 app.use('/api/v1/diseases', require('./routes/diseases'));
 app.use('/api/v1/analytics', require('./routes/analytics'));
 app.use('/api/v1/training', require('./routes/training'));
+app.use('/api/v1/settings', require('./routes/settings'));
+app.use('/api/v1/community', require('./routes/community'));
 
 // Routes - Aloe Vera Chatbot
 app.use('/api/chatbot', chatbotRoutes);
@@ -50,6 +54,8 @@ app.get('/health', (req, res) => {
 // Error handler (must be last)
 app.use(errorHandler);
 
-app.listen(PORT, '0.0.0.0', () =>{
-console.log(`Server running on port ${PORT}`)
-});             
+initSocket(server);
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});

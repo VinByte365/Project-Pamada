@@ -1,99 +1,111 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAppData } from '../contexts/AppDataContext';
 import AnimatedInView from '../components/common/AnimatedInView';
-import { colors, spacing, radius, typography, shadows } from '../theme';
+import ElevatedCard from '../components/ui/ElevatedCard';
+import ProgressRing from '../components/ui/ProgressRing';
+import StatusBadge from '../components/ui/StatusBadge';
+import useAppTheme from '../theme/useAppTheme';
+import { spacing, typography } from '../theme';
+import { useAppData } from '../contexts/AppDataContext';
 
 export default function AnalyticsScreen() {
-  const { analytics } = useAppData();
+  const { palette } = useAppTheme();
+  const { analytics, loading } = useAppData();
 
-  const diseases = [
-    { name: 'Leaf Spot', percentage: 5, color: '#F59E0B' },
-    { name: 'Root Rot', percentage: 2, color: '#EF4444' },
-    { name: 'Sunburn', percentage: 1, color: '#FB923C' },
+  const diseases = analytics.diseaseDistribution?.length
+    ? analytics.diseaseDistribution
+    : [
+        { name: 'Leaf Spot', percentage: 0, color: palette.status.warning },
+        { name: 'Root Rot', percentage: 0, color: palette.status.danger },
+        { name: 'Sunburn', percentage: 0, color: palette.accent.action },
+      ];
+
+  const metrics = [
+    {
+      key: 'harvest',
+      label: 'Harvest Rate',
+      value: Number(String(analytics.harvestRate || '0').replace('%', '')),
+      icon: 'leaf-outline',
+      tint: palette.primary.solid,
+    },
+    {
+      key: 'disease',
+      label: 'Disease Rate',
+      value: Number(String(analytics.diseaseRate || '0').replace('%', '')),
+      icon: 'warning-outline',
+      tint: palette.status.warning,
+    },
+    {
+      key: 'maturity',
+      label: 'Avg Maturity',
+      value: Number(String(analytics.avgMaturity || '0').replace('%', '')),
+      icon: 'analytics-outline',
+      tint: palette.status.watering,
+    },
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.contentContainer}>
-          <AnimatedInView>
-            <Text style={styles.title}>Farm Analytics</Text>
-          </AnimatedInView>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <AnimatedInView>
+          <Text style={[styles.kicker, { color: palette.text.secondary }]}>Farm Intelligence</Text>
+          <Text style={[styles.title, { color: palette.text.primary }]}>Analytics</Text>
+          <Text style={[styles.subtitle, { color: palette.text.secondary }]}>Actionable trends for harvesting, risk control, and care planning.</Text>
+        </AnimatedInView>
 
-          <AnimatedInView delay={80}>
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <View style={[styles.statIconWrapper, styles.statIconWrapperEmerald]}>
-                  <Ionicons name="leaf" size={18} color={colors.primary} />
-                </View>
-                <Text style={styles.statValue}>{analytics.totalPlants}</Text>
-                <Text style={styles.statLabel}>Total Plants</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={[styles.statIconWrapper, styles.statIconWrapperEmerald]}>
-                  <Ionicons name="trending-up" size={18} color={colors.primary} />
-                </View>
-                <Text style={styles.statValue}>{analytics.harvestRate}</Text>
-                <Text style={styles.statLabel}>Harvest Rate</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={[styles.statIconWrapper, styles.statIconWrapperAmber]}>
-                  <Ionicons name="warning" size={18} color={colors.warning} />
-                </View>
-                <Text style={styles.statValue}>{analytics.diseaseRate}</Text>
-                <Text style={styles.statLabel}>Disease Rate</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={[styles.statIconWrapper, styles.statIconWrapperBlue]}>
-                  <Ionicons name="analytics" size={18} color="#2563EB" />
-                </View>
-                <Text style={styles.statValue}>{analytics.avgMaturity}</Text>
-                <Text style={styles.statLabel}>Avg. Maturity</Text>
-              </View>
+        <AnimatedInView delay={60}>
+          <ElevatedCard style={styles.topCard} floating>
+            <View style={styles.topCardHeader}>
+              <Text style={[styles.topCardTitle, { color: palette.text.primary }]}>Active Plant Summary</Text>
+              <StatusBadge status="healthy" label={`${loading ? '...' : analytics.totalPlants} Plants`} />
             </View>
-          </AnimatedInView>
 
-          <AnimatedInView delay={150}>
-            <View style={styles.predictionCard}>
-              <View style={styles.predictionHeader}>
-                <Ionicons name="bulb" size={22} color={colors.white} />
-                <Text style={styles.predictionTitle}>AI Prediction</Text>
-              </View>
-              <Text style={styles.predictionText}>{analytics.prediction}</Text>
-              <Text style={styles.predictionSubtext}>{analytics.growthNote}</Text>
-            </View>
-          </AnimatedInView>
-
-          <AnimatedInView delay={220}>
-            <View style={styles.diseaseCard}>
-              <Text style={styles.diseaseTitle}>Disease Distribution</Text>
-
-              {diseases.map((disease, index) => (
-                <View
-                  key={disease.name}
-                  style={[styles.diseaseItem, index === diseases.length - 1 && styles.diseaseItemLast]}
-                >
-                  <View style={styles.diseaseHeader}>
-                    <Text style={styles.diseaseName}>{disease.name}</Text>
-                    <Text style={styles.diseasePercent}>{disease.percentage}%</Text>
+            <View style={styles.ringsRow}>
+              {metrics.map((metric) => (
+                <View key={metric.key} style={styles.ringItem}>
+                  <ProgressRing progress={loading ? 0 : metric.value} tint={metric.tint} label={metric.label} />
+                  <View style={styles.metricIconWrap}>
+                    <Ionicons name={metric.icon} size={14} color={metric.tint} />
                   </View>
-                  <View style={styles.diseaseBar}>
+                </View>
+              ))}
+            </View>
+          </ElevatedCard>
+        </AnimatedInView>
+
+        <AnimatedInView delay={120}>
+          <ElevatedCard style={styles.predictionCard}>
+            <View style={styles.predictionHeader}>
+              <Ionicons name="sparkles-outline" size={18} color={palette.accent.action} />
+              <Text style={[styles.predictionTitle, { color: palette.text.primary }]}>AI Prediction</Text>
+            </View>
+            <Text style={[styles.predictionText, { color: palette.text.primary }]}>
+              {loading ? 'Loading prediction...' : analytics.prediction}
+            </Text>
+            <Text style={[styles.predictionSubtext, { color: palette.text.secondary }]}>
+              {loading ? 'Analyzing trendline...' : analytics.growthNote}
+            </Text>
+          </ElevatedCard>
+        </AnimatedInView>
+
+        <AnimatedInView delay={180}>
+          <ElevatedCard style={styles.distributionCard}>
+            <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Disease Distribution</Text>
+            <View style={styles.distributionList}>
+              {diseases.map((disease) => (
+                <View key={disease.name} style={styles.distItem}>
+                  <View style={styles.distHead}>
+                    <Text style={[styles.distName, { color: palette.text.secondary }]}>{disease.name}</Text>
+                    <Text style={[styles.distValue, { color: palette.text.primary }]}>{disease.percentage}%</Text>
+                  </View>
+                  <View style={[styles.distBar, { backgroundColor: palette.surface.soft }]}>
                     <View
                       style={[
-                        styles.diseaseFill,
+                        styles.distFill,
                         {
-                          width: `${disease.percentage * 10}%`,
+                          width: `${Math.min(Math.max(disease.percentage, 0), 100)}%`,
                           backgroundColor: disease.color,
                         },
                       ]}
@@ -102,139 +114,114 @@ export default function AnalyticsScreen() {
                 </View>
               ))}
             </View>
-          </AnimatedInView>
-        </View>
+          </ElevatedCard>
+        </AnimatedInView>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: 'transparent',
   },
-  contentContainer: {
+  scrollContent: {
     paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md,
+  },
+  kicker: {
+    ...typography.caption,
   },
   title: {
     ...typography.headline,
-    color: colors.text.primary,
-    marginBottom: spacing.lg,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: spacing.lg,
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    width: '48%',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadows.sm,
-  },
-  statIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  statIconWrapperEmerald: {
-    backgroundColor: '#ECFDF5',
-  },
-  statIconWrapperAmber: {
-    backgroundColor: '#FFFBEB',
-  },
-  statIconWrapperBlue: {
-    backgroundColor: '#EFF6FF',
-  },
-  statValue: {
-    ...typography.titleLarge,
-    color: colors.text.primary,
-  },
-  statLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
     marginTop: spacing.xxs,
   },
+  subtitle: {
+    ...typography.body,
+    marginTop: spacing.xs,
+  },
+  topCard: {
+    padding: spacing.md,
+  },
+  topCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  topCardTitle: {
+    ...typography.bodyBold,
+  },
+  ringsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  ringItem: {
+    alignItems: 'center',
+    position: 'relative',
+  },
+  metricIconWrap: {
+    position: 'absolute',
+    top: -4,
+    right: 4,
+  },
   predictionCard: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.lg,
-    ...shadows.md,
+    padding: spacing.md,
   },
   predictionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    marginBottom: spacing.xs,
   },
   predictionTitle: {
     ...typography.bodyBold,
-    color: colors.white,
   },
   predictionText: {
     ...typography.title,
-    color: colors.white,
-    marginTop: spacing.sm,
   },
   predictionSubtext: {
-    ...typography.caption,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: spacing.xxs,
+    ...typography.body,
+    marginTop: spacing.xs,
+    lineHeight: 20,
   },
-  diseaseCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadows.sm,
+  distributionCard: {
+    padding: spacing.md,
   },
-  diseaseTitle: {
+  sectionTitle: {
     ...typography.bodyBold,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-  diseaseItem: {
-    marginBottom: spacing.md,
+  distributionList: {
+    gap: spacing.sm,
   },
-  diseaseItemLast: {
-    marginBottom: 0,
+  distItem: {
+    gap: spacing.xs,
   },
-  diseaseHeader: {
+  distHead: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    justifyContent: 'space-between',
   },
-  diseaseName: {
+  distName: {
     ...typography.caption,
-    color: colors.text.secondary,
   },
-  diseasePercent: {
+  distValue: {
     ...typography.caption,
     fontWeight: '700',
-    color: colors.text.primary,
   },
-  diseaseBar: {
-    height: 6,
-    backgroundColor: colors.borderLight,
-    borderRadius: 3,
+  distBar: {
+    height: 8,
+    borderRadius: 99,
     overflow: 'hidden',
   },
-  diseaseFill: {
+  distFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 99,
   },
 });

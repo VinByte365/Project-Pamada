@@ -1,369 +1,400 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import ScreenContainer from '../components/common/ScreenContainer';
+import AnimatedInView from '../components/common/AnimatedInView';
+import EmptyState from '../components/common/EmptyState';
+import ElevatedCard from '../components/ui/ElevatedCard';
+import FloatingActionButton from '../components/ui/FloatingActionButton';
+import PillFilterChip from '../components/ui/PillFilterChip';
+import ProgressRing from '../components/ui/ProgressRing';
+import StatusBadge from '../components/ui/StatusBadge';
+import WeatherWidget from '../components/ui/WeatherWidget';
+import NotificationFab from '../components/community/NotificationFab';
+import useAppTheme from '../theme/useAppTheme';
+import { radius, spacing, typography } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppData } from '../contexts/AppDataContext';
-import ScreenContainer from '../components/common/ScreenContainer';
-import Card from '../components/common/Card';
-import EmptyState from '../components/common/EmptyState';
-import { SkeletonStatCard, SkeletonCard } from '../components/common/SkeletonLoader';
-import AnimatedInView from '../components/common/AnimatedInView';
-import {
-  colors,
-  spacing,
-  typography,
-  radius,
-  dimensions,
-  shadows,
-  textStyles,
-} from '../theme';
 
-const SECTION_GAP = spacing.sectionGap;
-const CARD_GAP = spacing.sm;
+const segmentOptions = [
+  { id: 'today', label: 'Today', icon: 'today-outline' },
+  { id: 'priority', label: 'Priority', icon: 'flash-outline' },
+  { id: 'upcoming', label: 'Upcoming', icon: 'calendar-outline' },
+];
+
+const heroGif = require('../../assets/GIF_Aloegarve_-_crop_image_647_x_562_px-ezgif.com-reverse.gif');
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const { palette } = useAppTheme();
   const { user } = useAuth();
-  const { stats, recentScans, dailyTip } = useAppData();
-  const [loading] = useState(false);
+  const { recentScans, stats, dailyTip } = useAppData();
+  const [segment, setSegment] = useState('today');
 
-  const quickActions = [
-    { title: 'Scan Plant', icon: 'camera', screen: 'Scan' },
-    { title: 'View History', icon: 'time', screen: 'History' },
-    { title: 'Analytics', icon: 'analytics', screen: 'Analytics' },
-  ];
+  const displayName = user?.full_name?.split(' ')[0] || 'Grower';
+  const dateLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      }),
+    []
+  );
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'healthy':
-        return colors.success;
-      case 'leaf_spot':
-        return colors.warning;
-      case 'ready':
-        return colors.primary;
-      case 'root_rot':
-        return colors.error;
-      default:
-        return colors.textMuted;
-    }
-  };
+  const dashboardMetrics = useMemo(() => {
+    const total = Number(stats?.[0]?.value || 0);
+    const healthy = Number(stats?.[1]?.value || 0);
+    const risk = Number(stats?.[2]?.value || 0);
+    const ready = Number(stats?.[3]?.value || 0);
+    const healthyRate = total > 0 ? (healthy / total) * 100 : 0;
+    const riskRate = total > 0 ? (risk / total) * 100 : 0;
+    const readyRate = total > 0 ? (ready / total) * 100 : 0;
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'healthy':
-        return 'Healthy';
-      case 'leaf_spot':
-        return 'Leaf Spot';
-      case 'ready':
-        return 'Ready to Harvest';
-      case 'root_rot':
-        return 'Root Rot';
-      default:
-        return 'Unknown';
-    }
-  };
+    return {
+      healthyRate,
+      riskRate,
+      readyRate,
+      overdueTasks: Math.max(1, Math.min(4, risk || 1)),
+      completedToday: Math.max(1, Math.min(8, healthy || 2)),
+    };
+  }, [stats]);
 
-  const displayName = user?.full_name?.split(' ')[0] || 'Farmer';
+  const tasks = useMemo(() => {
+    const base = [
+      {
+        id: 'watering',
+        title: 'Watering Window',
+        subtitle: '2 plants due this morning',
+        status: 'watering',
+        priority: 'priority',
+      },
+      {
+        id: 'scan',
+        title: 'Health Check Scan',
+        subtitle: 'Run quick AI diagnosis',
+        status: 'ready',
+        priority: 'today',
+      },
+      {
+        id: 'nutrition',
+        title: 'Nutrient Refresh',
+        subtitle: 'Apply diluted feed in 2 days',
+        status: 'healthy',
+        priority: 'upcoming',
+      },
+    ];
+
+    if (segment === 'today') return base.filter((item) => item.priority !== 'upcoming');
+    if (segment === 'priority') return base.filter((item) => item.priority === 'priority');
+    return base;
+  }, [segment]);
 
   return (
     <ScreenContainer padding={false}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <AnimatedInView style={styles.greeting}>
-          <Text style={styles.greetingTitle}>Hello, {displayName}</Text>
-          <Text style={styles.greetingSubtitle}>Aloe Vera Farm Dashboard</Text>
-        </AnimatedInView>
-
-        <AnimatedInView delay={50}>
-          <Text style={styles.sectionTitle}>Quick Overview</Text>
-          {loading ? (
-            <View style={styles.statsGrid}>
-              {[1, 2, 3, 4].map((i) => (
-                <SkeletonStatCard key={i} />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.statsGrid}>
-              {stats.map((stat, index) => (
-                <Card key={index} padding="medium" style={styles.statCard}>
-                  <View style={[styles.statIconWrap, { backgroundColor: colors.primaryLight }]}>
-                    <Ionicons name={stat.icon} size={22} color={colors[stat.tone] || colors.primary} />
-                  </View>
-                  <Text style={styles.statValue}>{stat.value}</Text>
-                  <Text style={styles.statLabel}>{stat.label}</Text>
-                </Card>
-              ))}
-            </View>
-          )}
-        </AnimatedInView>
-
-        <AnimatedInView delay={120}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsRow}>
-            {quickActions.map((action, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.actionButton}
-                onPress={() => navigation.navigate(action.screen)}
-                activeOpacity={0.7}
-                accessibilityLabel={action.title}
-                accessibilityRole="button"
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name={action.icon} size={24} color={colors.primary} />
-                </View>
-                <Text style={styles.actionLabel}>{action.title}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </AnimatedInView>
-
-        <AnimatedInView delay={200}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Scans</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('History')}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <AnimatedInView>
+            <ImageBackground
+              source={heroGif}
+              style={styles.heroCard}
+              imageStyle={styles.heroImage}
             >
-              <Text style={styles.seeAll}>See All</Text>
-            </TouchableOpacity>
-          </View>
-
-          {loading ? (
-            <>
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </>
-          ) : recentScans.length === 0 ? (
-            <Card padding="medium">
-              <EmptyState
-                icon="camera-outline"
-                title="No scans yet"
-                subtitle="Scan your first Aloe Vera plant to see results here."
-                actionLabel="Scan Plant"
-                onAction={() => navigation.navigate('Scan')}
-              />
-            </Card>
-          ) : (
-            recentScans.map((scan) => (
-              <Card
-                key={scan.id}
-                onPress={() => navigation.navigate('History')}
-                padding="medium"
-                style={styles.scanCard}
-              >
-                <View style={styles.scanRow}>
-                  <View style={[styles.statusDot, { backgroundColor: getStatusColor(scan.status) }]} />
-                  <View style={styles.scanInfo}>
-                    <Text style={styles.scanName}>{scan.plantName}</Text>
-                    <Text style={styles.scanDate}>{scan.date}</Text>
-                  </View>
-                  <View style={styles.scanRight}>
-                    <Text style={[styles.scanStatus, { color: getStatusColor(scan.status) }]}>
-                      {getStatusText(scan.status)}
-                    </Text>
-                    <Text style={styles.scanMaturity}>{scan.maturity}</Text>
+              <View style={[styles.heroOverlay, { backgroundColor: `${palette.background.base}DD` }]}>
+                <View style={styles.heroTopRow}>
+                  <View style={styles.heroTopActions}>
+                    <TouchableOpacity
+                      style={[styles.headerIconWrap, { borderColor: palette.surface.border, backgroundColor: palette.surface.light }]}
+                      onPress={() => navigation.navigate('Messages')}
+                    >
+                      <Ionicons name="chatbubble-ellipses-outline" size={19} color={palette.text.primary} />
+                    </TouchableOpacity>
+                    <NotificationFab mode="header" />
                   </View>
                 </View>
-              </Card>
-            ))
-          )}
-        </AnimatedInView>
 
-        <AnimatedInView delay={260}>
-          <Card variant="success" padding="medium" style={styles.tipCard}>
-            <View style={styles.tipRow}>
-              <View style={styles.tipIconWrap}>
-                <Ionicons name="bulb-outline" size={22} color={colors.primary} />
+                <Text style={[styles.date, { color: palette.text.secondary }]}>{dateLabel}</Text>
+                <Text style={[styles.greeting, { color: palette.text.primary }]}>Good morning, {displayName}</Text>
+                <Text style={[styles.subtitle, { color: palette.text.secondary }]}>Daily care summary and smart priorities</Text>
               </View>
-              <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>Daily Tip</Text>
-                <Text style={styles.tipText}>{dailyTip}</Text>
-              </View>
+            </ImageBackground>
+          </AnimatedInView>
+
+          <AnimatedInView delay={40}>
+            <WeatherWidget />
+          </AnimatedInView>
+
+          <AnimatedInView delay={90}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Task Overview</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('History')}>
+                <Text style={[styles.link, { color: palette.primary.solid }]}>View All</Text>
+              </TouchableOpacity>
             </View>
-          </Card>
-        </AnimatedInView>
 
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
+            <View style={styles.segmentRow}>
+              {segmentOptions.map((item) => (
+                <PillFilterChip
+                  key={item.id}
+                  label={item.label}
+                  icon={item.icon}
+                  active={segment === item.id}
+                  onPress={() => setSegment(item.id)}
+                />
+              ))}
+            </View>
+
+            <ElevatedCard style={[styles.progressCard, { backgroundColor: palette.surface.light }]}>
+              <View style={styles.progressRingsRow}>
+                <ProgressRing progress={dashboardMetrics.healthyRate} label="Healthy" tint={palette.status.success} />
+                <ProgressRing progress={dashboardMetrics.readyRate} label="Ready" tint={palette.primary.solid} />
+                <ProgressRing progress={dashboardMetrics.riskRate} label="Risk" tint={palette.status.warning} />
+              </View>
+              <View style={styles.progressFooter}>
+                <Text style={[styles.progressMeta, { color: palette.text.secondary }]}>Overdue tasks {dashboardMetrics.overdueTasks}</Text>
+                <Text style={[styles.progressMeta, { color: palette.text.secondary }]}>Completed today {dashboardMetrics.completedToday}</Text>
+              </View>
+            </ElevatedCard>
+          </AnimatedInView>
+
+          <AnimatedInView delay={140}>
+            <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Smart Task Queue</Text>
+            <View style={styles.taskList}>
+              {tasks.map((task) => (
+                <ElevatedCard key={task.id} onPress={() => navigation.navigate('Scan')} style={styles.taskCard}>
+                  <View style={styles.taskTopRow}>
+                    <Text style={[styles.taskTitle, { color: palette.text.primary }]}>{task.title}</Text>
+                    <StatusBadge status={task.status} />
+                  </View>
+                  <Text style={[styles.taskSubtitle, { color: palette.text.secondary }]}>{task.subtitle}</Text>
+                </ElevatedCard>
+              ))}
+            </View>
+          </AnimatedInView>
+
+          <AnimatedInView delay={220}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Recent Scans</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('History')}>
+                <Text style={[styles.link, { color: palette.primary.solid }]}>Open Library</Text>
+              </TouchableOpacity>
+            </View>
+
+            {recentScans.length === 0 ? (
+              <ElevatedCard style={styles.emptyCard}>
+                <EmptyState
+                  icon="leaf-outline"
+                  title="No scans yet"
+                  subtitle="Start your first scan to build the plant library and reminders."
+                  actionLabel="Start Scan"
+                  onAction={() => navigation.navigate('Scan')}
+                />
+              </ElevatedCard>
+            ) : (
+              recentScans.map((scan) => (
+                <ElevatedCard key={scan.id} onPress={() => navigation.navigate('History')} style={styles.recentItem}>
+                  <View style={styles.recentRow}>
+                    <View>
+                      <Text style={[styles.recentTitle, { color: palette.text.primary }]}>{scan.plantName}</Text>
+                      <Text style={[styles.recentSub, { color: palette.text.secondary }]}>{scan.date}</Text>
+                    </View>
+                    <StatusBadge status={scan.status} />
+                  </View>
+                </ElevatedCard>
+              ))
+            )}
+          </AnimatedInView>
+
+          <AnimatedInView delay={260}>
+            <ElevatedCard style={styles.tipCard}>
+              <View style={styles.tipRow}>
+                <View style={[styles.tipIcon, { backgroundColor: `${palette.accent.action}22` }]}>
+                  <Ionicons name="bulb-outline" size={18} color={palette.accent.action} />
+                </View>
+                <View style={styles.tipContent}>
+                  <Text style={[styles.tipTitle, { color: palette.text.primary }]}>Predictive Reminder</Text>
+                  <Text style={[styles.tipText, { color: palette.text.secondary }]}>{dailyTip}</Text>
+                </View>
+              </View>
+            </ElevatedCard>
+          </AnimatedInView>
+
+          <View style={{ height: 110 }} />
+        </ScrollView>
+
+        <View style={styles.fabWrap}>
+          <FloatingActionButton onPress={() => navigation.navigate('Scan')} />
+        </View>
+      </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
+  container: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: spacing.screenPadding,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
+    gap: spacing.md,
+  },
+  date: {
+    ...typography.caption,
+  },
+  heroCard: {
+    borderRadius: radius.card,
+    overflow: 'hidden',
+    minHeight: 178,
+  },
+  heroImage: {
+    opacity: 0.3,
+  },
+  heroOverlay: {
+    padding: spacing.md,
+    minHeight: 178,
+    justifyContent: 'flex-end',
+  },
+  heroTopRow: {
+    position: 'absolute',
+    right: spacing.md,
+    top: spacing.md,
+    zIndex: 3,
+  },
+  heroTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  headerIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   greeting: {
-    marginBottom: SECTION_GAP,
+    ...typography.headline,
+    marginTop: spacing.xs,
   },
-  greetingTitle: {
-    ...typography.display,
-    color: colors.text.primary,
-    marginBottom: spacing.xxs,
-  },
-  greetingSubtitle: {
-    ...typography.bodyMedium,
-    color: colors.text.secondary,
-  },
-  sectionTitle: {
-    ...typography.title,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
+  subtitle: {
+    ...typography.body,
+    marginTop: spacing.xs,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  seeAll: {
-    ...typography.bodyBold,
-    color: colors.primary,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: SECTION_GAP,
-  },
-  statCard: {
-    width: dimensions.width < 375 ? '48%' : '48%',
-    minWidth: 0,
-    marginBottom: CARD_GAP,
-  },
-  statIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: spacing.sm,
+    marginTop: spacing.xs,
   },
-  statValue: {
-    ...typography.titleLarge,
-    color: colors.text.primary,
-    marginBottom: spacing.xxs,
+  sectionTitle: {
+    ...typography.title,
   },
-  statLabel: {
-    ...typography.caption,
-    color: colors.text.tertiary,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SECTION_GAP,
-    gap: spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadows.sm,
-  },
-  actionIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-  },
-  actionLabel: {
-    fontSize: textStyles.caption.fontSize,
-    fontWeight: '600',
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  scanCard: {
-    marginBottom: CARD_GAP,
-  },
-  scanRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: spacing.sm,
-  },
-  scanInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  scanName: {
-    fontSize: textStyles.bodyBold.fontSize,
-    fontWeight: textStyles.bodyBold.fontWeight,
-    color: colors.text.primary,
-    marginBottom: spacing.xxs,
-  },
-  scanDate: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  scanRight: {
-    alignItems: 'flex-end',
-    marginLeft: spacing.xs,
-  },
-  scanStatus: {
+  link: {
     ...typography.caption,
     fontWeight: '700',
-    marginBottom: spacing.xxs,
   },
-  scanMaturity: {
+  segmentRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+    marginBottom: spacing.sm,
+  },
+  progressCard: {
+    padding: spacing.md,
+    borderRadius: radius.card,
+  },
+  progressRingsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  progressFooter: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  progressMeta: {
     ...typography.caption,
-    color: colors.textMuted,
+  },
+  taskList: {
+    gap: spacing.xs,
+  },
+  taskCard: {
+    padding: spacing.md,
+  },
+  taskTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  taskTitle: {
+    ...typography.bodyBold,
+    flex: 1,
+  },
+  taskSubtitle: {
+    ...typography.caption,
+    marginTop: spacing.xs,
+  },
+  emptyCard: {
+    padding: spacing.md,
+  },
+  recentItem: {
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  recentTitle: {
+    ...typography.bodyBold,
+    maxWidth: 220,
+  },
+  recentSub: {
+    ...typography.caption,
+    marginTop: spacing.xxs,
   },
   tipCard: {
-    marginTop: spacing.md,
-    marginBottom: 0,
+    padding: spacing.md,
   },
   tipRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
-  tipIconWrap: {
-    marginRight: spacing.sm,
-    marginTop: 2,
+  tipIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
   },
   tipContent: {
     flex: 1,
   },
   tipTitle: {
     ...typography.bodyBold,
-    color: colors.primary,
-    marginBottom: spacing.xxs,
   },
   tipText: {
     ...typography.body,
-    color: colors.text.primary,
+    marginTop: spacing.xxs,
     lineHeight: 20,
   },
-  bottomSpacer: {
-    height: spacing.xxl,
+  fabWrap: {
+    position: 'absolute',
+    right: spacing.screenPadding,
+    bottom: spacing.lg,
   },
 });

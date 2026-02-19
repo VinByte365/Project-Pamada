@@ -28,9 +28,19 @@ const scanLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Messaging rate limiter
+const messageLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  message: 'Too many messages sent. Please slow down.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 module.exports = {
   apiLimiter,
   authLimiter,
-  scanLimiter
+  scanLimiter,
+  messageLimiter
 };
 

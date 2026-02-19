@@ -23,6 +23,8 @@ export const API_BASE_URL = (() => {
   return 'https://your-api-domain.com';
 })();
 
+export const SOCKET_URL = API_BASE_URL;
+
 export const ROLES = [
   { value: 'grower', label: 'Grower' },
   { value: 'admin', label: 'Admin' },

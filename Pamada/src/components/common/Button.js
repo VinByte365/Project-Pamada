@@ -1,6 +1,8 @@
-import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, View } from 'react-native';
-import { colors, spacing, radius, typography } from '../../theme';
+import React, { useRef } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { motion, radius, shadows, spacing, typography } from '../../theme';
+import useAppTheme from '../../theme/useAppTheme';
 
 export default function Button({
   label,
@@ -11,53 +13,81 @@ export default function Button({
   style,
   icon,
 }) {
+  const { palette } = useAppTheme();
   const isDisabled = disabled || loading;
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const animate = (toValue) => {
+    Animated.timing(scale, {
+      toValue,
+      duration: motion.buttonPress,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const contentColor = type === 'secondary' ? palette.text.primary : palette.accent.on;
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.base,
-        type === 'secondary' && styles.secondary,
-        isDisabled && styles.disabled,
-        style,
-      ]}
-      onPress={onPress}
-      disabled={isDisabled}
-      activeOpacity={0.8}
-    >
-      <View style={styles.row}>
-        {icon ? <View style={styles.icon}>{icon}</View> : null}
-        {loading ? (
-          <ActivityIndicator color={type === 'secondary' ? colors.primary : colors.white} />
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        onPress={onPress}
+        disabled={isDisabled}
+        onPressIn={() => animate(0.97)}
+        onPressOut={() => animate(1)}
+        style={[styles.wrap, isDisabled && styles.disabled]}
+      >
+        {type === 'secondary' ? (
+          <View style={[styles.secondary, { backgroundColor: palette.surface.glass, borderColor: palette.surface.borderStrong }]}>
+            <View style={styles.row}>
+              {icon ? <View style={styles.icon}>{icon}</View> : null}
+              {loading ? <ActivityIndicator color={contentColor} /> : <Text style={[styles.label, { color: contentColor }]}>{label}</Text>}
+            </View>
+          </View>
         ) : (
-          <Text style={[styles.label, type === 'secondary' && styles.labelSecondary]}>{label}</Text>
+          <LinearGradient
+            colors={[palette.accent.action, '#6E8A72']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.base}
+          >
+            <View style={styles.row}>
+              {icon ? <View style={styles.icon}>{icon}</View> : null}
+              {loading ? <ActivityIndicator color={contentColor} /> : <Text style={[styles.label, { color: contentColor }]}>{label}</Text>}
+            </View>
+          </LinearGradient>
         )}
-      </View>
-    </TouchableOpacity>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    borderRadius: radius.button,
+    overflow: 'hidden',
+    ...shadows.surface,
+  },
   base: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondary: {
-    backgroundColor: colors.surface,
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.primary,
   },
   disabled: {
     opacity: 0.6,
   },
   label: {
     ...typography.bodyBold,
-    color: colors.white,
-  },
-  labelSecondary: {
-    color: colors.primary,
+    letterSpacing: 0.2,
   },
   row: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
 import React from 'react';
-import { TouchableOpacity, View, StyleSheet } from 'react-native';
-import { colors, radius, spacing, shadows } from '../../theme';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { radius, spacing, shadows } from '../../theme';
+import useAppTheme from '../../theme/useAppTheme';
 
 const paddingSizes = {
   none: 0,
@@ -10,33 +11,48 @@ const paddingSizes = {
 };
 
 export default function Card({ children, style, padding = 'small', onPress, variant }) {
-  const Component = onPress ? TouchableOpacity : View;
-  return (
-    <Component
-      style={[
-        styles.card,
-        variant === 'success' && styles.success,
-        { padding: paddingSizes[padding] ?? paddingSizes.small },
-        style,
-      ]}
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      {children}
-    </Component>
-  );
+  const { palette } = useAppTheme();
+
+  const backgroundColor =
+    variant === 'success'
+      ? `${palette.status.success}1A`
+      : variant === 'glass'
+        ? palette.surface.glass
+        : palette.surface.light;
+
+  const baseStyle = [
+    styles.card,
+    {
+      backgroundColor,
+      borderColor: variant === 'success' ? `${palette.status.success}45` : palette.surface.border,
+      padding: paddingSizes[padding] ?? paddingSizes.small,
+    },
+    style,
+  ];
+
+  if (onPress) {
+    return (
+      <Pressable
+        style={({ pressed }) => [baseStyle, pressed ? styles.pressed : null]}
+        onPress={onPress}
+        accessibilityRole="button"
+      >
+        {children}
+      </Pressable>
+    );
+  }
+
+  return <View style={baseStyle}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadows.sm,
+    ...shadows.surface,
   },
-  success: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#DCFCE7',
+  pressed: {
+    transform: [{ scale: 0.99 }],
+    opacity: 0.94,
   },
 });

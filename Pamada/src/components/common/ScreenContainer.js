@@ -14,10 +14,11 @@ export default function ScreenContainer({ children, style, padding = true, edges
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: 'transparent',
   },
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   padded: {
     paddingHorizontal: spacing.screenPadding,

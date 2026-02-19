@@ -113,8 +113,8 @@ analyticsSchema.statics.aggregateDaily = async function(date, userId = null) {
   const metrics = {
     total_scans: scans.length,
     total_plants_monitored: new Set(scans.map(s => s.plant_id.toString())).size,
-    harvest_ready_count: scans.filter(s => s.analysis_result.harvest_ready).length,
-    disease_alerts: scans.filter(s => s.analysis_result.disease_detected).length,
+    harvest_ready_count: scans.filter(s => s.analysis_result?.harvest_ready).length,
+    disease_alerts: scans.filter(s => s.analysis_result?.disease_detected).length,
     condition_distribution: {
       healthy: 0,
       leaf_spot: 0,
@@ -147,9 +147,9 @@ analyticsSchema.statics.aggregateDaily = async function(date, userId = null) {
   
   if (scans.length > 0) {
     metrics.avg_health_score = scans.reduce((sum, s) => 
-      sum + (s.analysis_result.health_score || 0), 0) / scans.length;
+      sum + (s.analysis_result?.health_score || 0), 0) / scans.length;
     metrics.avg_confidence = scans.reduce((sum, s) => 
-      sum + (s.analysis_result.confidence_score || 0), 0) / scans.length;
+      sum + (s.analysis_result?.confidence_score || 0), 0) / scans.length;
     metrics.avg_processing_time_ms = scans.reduce((sum, s) => 
       sum + (s.scan_metadata.processing_time_ms || 0), 0) / scans.length;
   }

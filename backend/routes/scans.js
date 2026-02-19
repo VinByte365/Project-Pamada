@@ -5,7 +5,8 @@ const {
   getScan,
   updateScan,
   deleteScan,
-  getScansByPlant
+  getScansByPlant,
+  getMlHealth
 } = require('../controllers/scanController');
 const { protect } = require('../middlewares/auth');
 const upload = require('../middlewares/upload');
@@ -19,6 +20,8 @@ router.use(protect);
 router.route('/')
   .get(getScans)
   .post(scanLimiter, upload.single('image'), createScan);
+
+router.get('/ml-health', getMlHealth);
 
 router.route('/plant/:plantId')
   .get(getScansByPlant);

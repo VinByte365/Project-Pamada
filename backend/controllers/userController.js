@@ -48,7 +48,10 @@ exports.register = asyncHandler(async (req, res) => {
         email: user.email,
         full_name: user.full_name,
         role: user.role,
-        farm_details: user.farm_details
+        farm_details: user.farm_details,
+        phone: user.phone || '',
+        preferences: user.preferences,
+        profile_image: user.profile_image
       },
       token
     }
@@ -112,7 +115,9 @@ exports.login = asyncHandler(async (req, res) => {
         full_name: user.full_name,
         role: user.role,
         farm_details: user.farm_details,
-        preferences: user.preferences
+        phone: user.phone || '',
+        preferences: user.preferences,
+        profile_image: user.profile_image
       },
       token
     }

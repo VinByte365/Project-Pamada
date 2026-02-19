@@ -18,6 +18,7 @@ const {
 
 // Store chat sessions per user (in production, use database)
 const activeSessions = new Map();
+const OFF_TOPIC_RESPONSE = 'That’s outside my focus. I’m designed to answer aloe vera–related questions only. Please ask something about aloe vera care, growth, or use.';
 
 /**
  * Check if response is safe and on-topic
@@ -55,17 +56,7 @@ const validateResponse = (response, userInput) => {
  * @returns {string} Fallback response
  */
 const generateFallbackResponse = (userInput) => {
-  return `I appreciate your question, but I'm specialized in Aloe Vera topics only. Your question doesn't seem to be related to Aloe Vera cultivation, care, diseases, harvesting, products, or farm locations.
-
-I can help you with:
-- **Cultivation**: How to grow Aloe Vera, soil requirements, propagation
-- **Care**: Watering, fertilizing, sunlight, maintenance
-- **Diseases & Pests**: Disease identification, pest management
-- **Harvesting**: When and how to harvest, gel extraction
-- **Products & Benefits**: Aloe uses, health benefits
-- **Locations**: Where to find Aloe Vera farms, suitable growing regions
-
-Could you rephrase your question about Aloe Vera? ðŸŒ¿`;
+  return OFF_TOPIC_RESPONSE;
 };
 
 /**
@@ -175,9 +166,9 @@ const chat = async (userInput, userId = 'anonymous', confidenceThreshold = 0.3) 
 
     if (!inputValidation.isValid) {
       return {
-        success: false,
+        success: true,
         message: generateFallbackResponse(userInput),
-        confidence: inputValidation.classification.confidence,
+        confidence: inputValidation.classification ? inputValidation.classification.confidence : 0,
         isOffTopic: true,
         processingTime: Date.now() - startTime,
         timestamp: new Date()

@@ -47,22 +47,26 @@ exports.getAnalytics = asyncHandler(async (req, res) => {
 exports.getDailyAnalytics = asyncHandler(async (req, res) => {
   const { date } = req.query;
   const targetDate = date ? new Date(date) : new Date();
+  const startOfDay = new Date(targetDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(targetDate);
+  endOfDay.setHours(23, 59, 59, 999);
 
   // Check if analytics already exist for this date
   let analytics = await Analytics.findOne({
     user_id: req.user.id,
     date: {
-      $gte: new Date(targetDate.setHours(0, 0, 0, 0)),
-      $lte: new Date(targetDate.setHours(23, 59, 59, 999))
+      $gte: startOfDay,
+      $lte: endOfDay
     }
   });
 
   if (!analytics) {
     // Generate analytics for the date
-    const metrics = await Analytics.aggregateDaily(targetDate, req.user.id);
+    const metrics = await Analytics.aggregateDaily(startOfDay, req.user.id);
 
     analytics = await Analytics.create({
-      date: targetDate,
+      date: startOfDay,
       user_id: req.user.id,
       metrics
     });

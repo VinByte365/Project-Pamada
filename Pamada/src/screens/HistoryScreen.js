@@ -1,316 +1,269 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-} from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import PillFilterChip from '../components/ui/PillFilterChip';
+import PlantPreviewTile from '../components/ui/PlantPreviewTile';
+import ElevatedCard from '../components/ui/ElevatedCard';
+import useAppTheme from '../theme/useAppTheme';
+import { spacing, typography } from '../theme';
 import { useAppData } from '../contexts/AppDataContext';
-import AnimatedInView from '../components/common/AnimatedInView';
-import { SkeletonCard } from '../components/common/SkeletonLoader';
-import { colors, spacing, radius, typography, shadows } from '../theme';
 
-const HistoryScreen = () => {
+const filters = [
+  { id: 'all', label: 'All', icon: 'apps-outline' },
+  { id: 'healthy', label: 'Healthy', icon: 'checkmark-circle-outline' },
+  { id: 'ready', label: 'Ready', icon: 'leaf-outline' },
+  { id: 'leaf_spot', label: 'Watchlist', icon: 'warning-outline' },
+];
+
+const urgencyOf = (status) => {
+  if (status === 'root_rot') return { label: 'Urgent', color: '#EF4444' };
+  if (status === 'leaf_spot') return { label: 'Review Today', color: '#F59E0B' };
+  if (status === 'ready') return { label: 'Harvest Soon', color: '#22C55E' };
+  return { label: 'Routine Care', color: '#60A5FA' };
+};
+
+export default function HistoryScreen() {
+  const navigation = useNavigation();
+  const { palette } = useAppTheme();
   const { scans } = useAppData();
   const [filter, setFilter] = useState('all');
-  const [loading] = useState(false);
+  const [selectedScan, setSelectedScan] = useState(null);
 
-  const filters = [
-    { id: 'all', label: 'All', icon: 'apps' },
-    { id: 'healthy', label: 'Healthy', icon: 'checkmark-circle' },
-    { id: 'leaf_spot', label: 'Leaf Spot', icon: 'warning' },
-    { id: 'ready', label: 'Ready', icon: 'leaf' },
-  ];
-
-  const filteredScans = filter === 'all'
-    ? scans
-    : scans.filter((scan) => scan.status === filter);
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'healthy':
-        return { label: 'Healthy', bg: '#E8F5E9', color: colors.successDark };
-      case 'ready':
-        return { label: 'Ready', bg: '#DCFCE7', color: colors.primaryDark };
-      case 'leaf_spot':
-        return { label: 'Leaf Spot', bg: '#FEF3C7', color: '#B45309' };
-      case 'root_rot':
-        return { label: 'Root Rot', bg: '#FEE2E2', color: '#B91C1C' };
-      default:
-        return { label: 'Unknown', bg: '#E5E7EB', color: colors.textMuted };
-    }
-  };
+  const data = useMemo(() => {
+    const filtered = filter === 'all' ? scans : scans.filter((scan) => scan.status === filter);
+    return filtered.map((scan) => {
+      const urgency = urgencyOf(scan.status);
+      return {
+        ...scan,
+        urgency: urgency.label,
+        urgencyColor: urgency.color,
+      };
+    });
+  }, [scans, filter]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <LinearGradient
-          colors={[colors.primary, colors.primaryDark]}
-          style={styles.header}
-        >
-          <Text style={styles.headerTitle}>Scan History</Text>
-          <Text style={styles.headerSubtitle}>Review plant maturity and health trends</Text>
-        </LinearGradient>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: palette.text.primary }]}>Plant Library</Text>
+          <Text style={[styles.subtitle, { color: palette.text.secondary }]}>Browse plants by health status and urgency</Text>
+        </View>
 
         <ScrollView
           horizontal
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterRow}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterContainer}
         >
-          {filters.map((filterItem) => {
-            const active = filter === filterItem.id;
-            return (
-              <TouchableOpacity
-                key={filterItem.id}
-                style={[styles.filterButton, active ? styles.filterButtonActive : styles.filterButtonInactive]}
-                onPress={() => setFilter(filterItem.id)}
-              >
-                <Ionicons
-                  name={filterItem.icon}
-                  size={14}
-                  color={active ? colors.white : colors.text.secondary}
-                />
-                <Text
-                  style={[
-                    styles.filterButtonText,
-                    active ? styles.filterButtonTextActive : styles.filterButtonTextInactive,
-                  ]}
-                >
-                  {filterItem.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {filters.map((item) => (
+            <PillFilterChip
+              key={item.id}
+              label={item.label}
+              icon={item.icon}
+              active={filter === item.id}
+              onPress={() => setFilter(item.id)}
+            />
+          ))}
         </ScrollView>
 
-        <View style={styles.scanListContainer}>
-          {loading ? (
-            <>
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </>
-          ) : (
-            filteredScans.map((scan, index) => {
-              const badge = getStatusBadge(scan.status);
-              return (
-                <AnimatedInView key={scan.id} delay={index * 60}>
-                  <TouchableOpacity style={styles.scanCard} activeOpacity={0.85}>
-                    <View style={styles.scanCardRow}>
-                      <Image source={{ uri: scan.image }} style={styles.scanImage} />
-                      <View style={styles.scanInfo}>
-                        <View style={styles.scanHeader}>
-                          <View>
-                            <Text style={styles.scanName}>{scan.plantName}</Text>
-                            <Text style={styles.scanDate}>
-                              {scan.date} - {scan.time}
-                            </Text>
-                          </View>
-                          <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-                            <Text style={[styles.statusBadgeText, { color: badge.color }]}>
-                              {badge.label}
-                            </Text>
-                          </View>
-                        </View>
+        <ElevatedCard style={styles.summaryCard}>
+          <Text style={[styles.summaryLabel, { color: palette.text.secondary }]}>Daily Care Summary</Text>
+          <Text style={[styles.summaryValue, { color: palette.text.primary }]}>{data.length} plants in this view</Text>
+        </ElevatedCard>
 
-                        <Text style={styles.maturityLabel}>Maturity</Text>
-                        <View style={styles.maturityRow}>
-                          <View style={styles.maturityBar}>
-                            <View
-                              style={[
-                                styles.maturityFill,
-                                { width: `${scan.maturityPercent}%` },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.maturityText}>{scan.maturity}</Text>
-                        </View>
+        <FlatList
+          data={data}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <ElevatedCard style={styles.emptyCard}>
+              <View style={[styles.emptyIconWrap, { backgroundColor: `${palette.primary.solid}14` }]}>
+                <Ionicons name="leaf-outline" size={24} color={palette.primary.solid} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: palette.text.primary }]}>Your plant library is empty</Text>
+              <Text style={[styles.emptySub, { color: palette.text.secondary }]}>
+                Start with a fresh scan to build organized plant records and care status insights.
+              </Text>
+              <TouchableOpacity
+                style={[styles.emptyAction, { backgroundColor: palette.primary.solid }]}
+                onPress={() => navigation.navigate('Scan')}
+              >
+                <Ionicons name="scan-outline" size={16} color={palette.primary.on} />
+                <Text style={[styles.emptyActionText, { color: palette.primary.on }]}>Start Scan</Text>
+              </TouchableOpacity>
+            </ElevatedCard>
+          }
+          renderItem={({ item }) => <PlantPreviewTile item={item} onPress={() => setSelectedScan(item)} />}
+        />
+      </View>
 
-                        {scan.diseases.length > 0 && (
-                          <View style={styles.diseaseWarning}>
-                            <Ionicons name="warning" size={14} color={colors.warning} />
-                            <Text style={styles.diseaseText}>{scan.diseases.join(', ')}</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
+      <Modal
+        visible={Boolean(selectedScan)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedScan(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: palette.text.primary }]}>Scan Details</Text>
+              <TouchableOpacity onPress={() => setSelectedScan(null)}>
+                <Ionicons name="close" size={20} color={palette.text.secondary} />
+              </TouchableOpacity>
+            </View>
 
-                    <View style={styles.viewAnalysisButton}>
-                      <Text style={styles.viewAnalysisText}>View Full Analysis</Text>
-                      <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-                    </View>
-                  </TouchableOpacity>
-                </AnimatedInView>
-              );
-            })
-          )}
+            {selectedScan?.image ? (
+              <Image source={{ uri: selectedScan.image }} style={styles.modalImage} resizeMode="cover" />
+            ) : null}
+
+            <Text style={[styles.detailName, { color: palette.text.primary }]}>{selectedScan?.plantName || 'Aloe Vera Plant'}</Text>
+            <Text style={[styles.detailMeta, { color: palette.text.secondary }]}>
+              {selectedScan?.date || '-'} {selectedScan?.time ? `• ${selectedScan.time}` : ''}
+            </Text>
+            <Text style={[styles.detailLabel, { color: palette.text.secondary }]}>Detected Summary</Text>
+            <Text style={[styles.detailValue, { color: palette.text.primary }]}>
+              {selectedScan?.detectedSummary || 'No summary available'}
+            </Text>
+            <Text style={[styles.detailLabel, { color: palette.text.secondary }]}>Confidence Level</Text>
+            <Text style={[styles.detailConfidence, { color: palette.primary.solid }]}>
+              {typeof selectedScan?.confidenceLevel === 'number' ? `${selectedScan.confidenceLevel}%` : 'N/A'}
+            </Text>
+          </View>
         </View>
-      </ScrollView>
+      </Modal>
     </SafeAreaView>
   );
-};
-
-export default HistoryScreen;
+}
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    paddingHorizontal: spacing.screenPadding,
+    paddingTop: spacing.xs,
   },
   header: {
-    paddingHorizontal: spacing.screenPadding,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
-  headerTitle: {
+  title: {
     ...typography.headline,
-    color: colors.white,
   },
-  headerSubtitle: {
-    ...typography.caption,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: spacing.xxs,
+  subtitle: {
+    ...typography.body,
+    marginTop: spacing.xs,
   },
-  filterContainer: {
-    paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  filterButton: {
+  filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 999,
     gap: spacing.xs,
+    paddingRight: spacing.sm,
   },
-  filterButtonActive: {
-    backgroundColor: colors.primary,
-    ...shadows.sm,
+  filterScroll: {
+    marginBottom: spacing.md,
   },
-  filterButtonInactive: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  filterButtonText: {
-    ...typography.caption,
-    fontWeight: '700',
-  },
-  filterButtonTextActive: {
-    color: colors.white,
-  },
-  filterButtonTextInactive: {
-    color: colors.text.secondary,
-  },
-  scanListContainer: {
-    paddingHorizontal: spacing.screenPadding,
-    paddingBottom: spacing.xxl,
-  },
-  scanCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+  summaryCard: {
     padding: spacing.md,
     marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadows.sm,
   },
-  scanCardRow: {
-    flexDirection: 'row',
-  },
-  scanImage: {
-    width: 82,
-    height: 82,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceAlt,
-  },
-  scanInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  scanHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  scanName: {
-    ...typography.bodyBold,
-    color: colors.text.primary,
-  },
-  scanDate: {
+  summaryLabel: {
     ...typography.caption,
-    color: colors.textMuted,
+  },
+  summaryValue: {
+    ...typography.bodyBold,
     marginTop: spacing.xxs,
   },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: 999,
+  listContent: {
+    paddingBottom: spacing.xxl,
+    flexGrow: 1,
   },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  maturityLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  maturityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  maturityBar: {
-    flex: 1,
-    height: 6,
-    backgroundColor: colors.borderLight,
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginRight: spacing.sm,
-  },
-  maturityFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-  },
-  maturityText: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: colors.primaryDark,
-    minWidth: 40,
-  },
-  diseaseWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    gap: spacing.xs,
-  },
-  diseaseText: {
-    ...typography.caption,
-    color: colors.warning,
-    fontWeight: '600',
-  },
-  viewAnalysisButton: {
-    flexDirection: 'row',
+  emptyCard: {
+    padding: spacing.lg,
+    minHeight: 260,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
   },
-  viewAnalysisText: {
+  emptyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  emptyTitle: {
+    ...typography.title,
+    textAlign: 'center',
+  },
+  emptySub: {
+    ...typography.body,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    maxWidth: 280,
+  },
+  emptyAction: {
+    marginTop: spacing.md,
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  emptyActionText: {
     ...typography.bodyBold,
-    color: colors.primary,
-    marginRight: spacing.xs,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.screenPadding,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    ...typography.bodyBold,
+  },
+  modalImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 14,
+    marginTop: spacing.sm,
+  },
+  detailName: {
+    ...typography.title,
+    marginTop: spacing.sm,
+  },
+  detailMeta: {
+    ...typography.caption,
+    marginTop: 2,
+  },
+  detailLabel: {
+    ...typography.caption,
+    marginTop: spacing.sm,
+  },
+  detailValue: {
+    ...typography.body,
+    marginTop: 2,
+    lineHeight: 20,
+  },
+  detailConfidence: {
+    ...typography.title,
+    marginTop: 2,
   },
 });

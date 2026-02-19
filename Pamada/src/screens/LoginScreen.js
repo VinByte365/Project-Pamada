@@ -1,54 +1,131 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
+  Dimensions,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
-import Input from '../components/common/Input';
 import Button from '../components/common/Button';
-import { colors, spacing, typography, radius } from '../theme';
+import ElevatedCard from '../components/ui/ElevatedCard';
+import AuthTextField from '../components/auth/AuthTextField';
+import useAppTheme from '../theme/useAppTheme';
+import { spacing, typography } from '../theme';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REMEMBER_EMAIL_KEY = '@aloe_remember_email';
 
+const AUTOFILL_BLOCK_PROPS = Platform.select({
+  android: {
+    autoComplete: 'off',
+    textContentType: 'none',
+    importantForAutofill: 'no',
+  },
+  ios: {
+    autoComplete: 'off',
+    textContentType: 'none',
+  },
+  default: {
+    autoComplete: 'off',
+  },
+});
+
 export default function LoginScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const { palette } = useAppTheme();
   const { login } = useAuth();
+
+  const scrollRef = useRef(null);
+  const scrollYRef = useRef(0);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
+    let mounted = true;
     AsyncStorage.getItem(REMEMBER_EMAIL_KEY).then((stored) => {
-      if (stored) {
+      if (mounted && stored) {
         setEmail(stored);
         setRememberMe(true);
       }
     });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const isEmailValid = EMAIL_REGEX.test(email.trim());
-  const isPasswordValid = password.length >= 6;
-  const isFormValid = isEmailValid && isPasswordValid;
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event?.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const isFormValid = useMemo(() => {
+    return EMAIL_REGEX.test(email.trim()) && password.length >= 6;
+  }, [email, password]);
+
+  const ensureVisible = (inputRef) => {
+    const field = inputRef?.current;
+    const scroll = scrollRef.current;
+    if (!field || !scroll || !keyboardHeight) return;
+
+    requestAnimationFrame(() => {
+      field.measureInWindow((x, y, width, height) => {
+        const windowHeight = Dimensions.get('window').height;
+        const keyboardTop = windowHeight - keyboardHeight;
+        const fieldBottom = y + height;
+        const safeGap = 18;
+
+        if (fieldBottom > keyboardTop - safeGap) {
+          const overlap = fieldBottom - (keyboardTop - safeGap);
+          scroll.scrollTo({
+            y: Math.max(0, scrollYRef.current + overlap + 20),
+            animated: true,
+          });
+        }
+      });
+    });
+  };
 
   const handleLogin = async () => {
     if (!isFormValid || loading) return;
+
+    Keyboard.dismiss();
     setError('');
     setLoading(true);
+
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
-      await login(email.trim(), password);
+      await login(normalizedEmail, password);
       if (rememberMe) {
-        await AsyncStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+        await AsyncStorage.setItem(REMEMBER_EMAIL_KEY, normalizedEmail);
       } else {
         await AsyncStorage.removeItem(REMEMBER_EMAIL_KEY);
       }
@@ -60,92 +137,134 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={insets.top}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.lg) },
+          ]}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          onScroll={(event) => {
+            scrollYRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
+          <View style={styles.hero}>
             <View style={styles.logoCircle}>
-              <Ionicons name="leaf" size={48} color={colors.primary} />
+              <Ionicons name="leaf" size={44} color="#2E9B57" />
             </View>
-            <Text style={styles.title}>Pamada</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
+            <Text style={styles.heroTitle}>Pamada</Text>
+            <Text style={styles.heroSubtitle}>Sign in to your account</Text>
           </View>
 
-          <View style={styles.form}>
+          <ElevatedCard style={styles.formCard} floating>
             {error ? (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={20} color={colors.error} />
-                <Text style={styles.errorText}>{error}</Text>
+              <View
+                style={[
+                  styles.errorBox,
+                  {
+                    backgroundColor: `${palette.status.danger}14`,
+                    borderColor: `${palette.status.danger}40`,
+                  },
+                ]}
+              >
+                <Ionicons name="alert-circle-outline" size={18} color={palette.status.danger} />
+                <Text style={[styles.errorText, { color: palette.status.danger }]}>{error}</Text>
               </View>
             ) : null}
 
-            <Input
-              label="Email"
-              value={email}
-              onChangeText={(t) => { setEmail(t); setError(''); }}
-              placeholder="you@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-            />
+            <View>
+              <AuthTextField
+                ref={emailRef}
+                label="Email"
+                icon=""
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (error) setError('');
+                }}
+                onFocus={() => ensureVisible(emailRef)}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                returnKeyType="done"
+                blurOnSubmit
+                editable={!loading}
+                {...AUTOFILL_BLOCK_PROPS}
+              />
 
-            <Input
-              label="Password"
-              value={password}
-              onChangeText={(t) => { setPassword(t); setError(''); }}
-              placeholder="********"
-              secureTextEntry={!showPassword}
-              onToggleSecure={() => setShowPassword(!showPassword)}
-              editable={!loading}
-            />
+              <AuthTextField
+                ref={passwordRef}
+                label="Password"
+                icon=""
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (error) setError('');
+                }}
+                onFocus={() => ensureVisible(passwordRef)}
+                placeholder="********"
+                secureTextEntry={!showPassword}
+                onToggleSecure={() => setShowPassword((prev) => !prev)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                editable={!loading}
+                {...AUTOFILL_BLOCK_PROPS}
+              />
+            </View>
 
             <View style={styles.row}>
               <TouchableOpacity
                 style={styles.checkboxRow}
-                onPress={() => setRememberMe(!rememberMe)}
+                onPress={() => setRememberMe((prev) => !prev)}
                 disabled={loading}
                 accessibilityLabel="Remember me"
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: rememberMe }}
               >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                  {rememberMe ? <Ionicons name="checkmark" size={16} color={colors.surface} /> : null}
+                <View
+                  style={[
+                    styles.checkbox,
+                    {
+                      borderColor: rememberMe ? '#7CC191' : '#A7A7A7',
+                      backgroundColor: rememberMe ? '#7CC191' : '#FFFFFF',
+                    },
+                  ]}
+                >
+                  {rememberMe ? <Ionicons name="checkmark" size={13} color="#FFFFFF" /> : null}
                 </View>
                 <Text style={styles.checkboxLabel}>Remember Me</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => {}} disabled={loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+
+              <TouchableOpacity disabled={loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={styles.forgotLink}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
 
-            <Button
-              label="Sign In"
-              onPress={handleLogin}
-              type="primary"
-              loading={loading}
-              disabled={!isFormValid}
-              style={styles.button}
-            />
+            <Button label="Sign In" onPress={handleLogin} loading={loading} disabled={!isFormValid} style={styles.button} />
 
             <View style={styles.switchContainer}>
               <Text style={styles.switchText}>Don't have an account? </Text>
-              <TouchableOpacity
-                onPress={() => navigation.replace('Register')}
-                disabled={loading}
-              >
+              <TouchableOpacity onPress={() => navigation.replace('Register')} disabled={loading}>
                 <Text style={styles.switchLink}>Register</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ElevatedCard>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -155,113 +274,114 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F3F4F4',
   },
   keyboardView: {
+    flex: 1,
+  },
+  scroll: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.xxl,
-    paddingBottom: spacing.xxxl,
+    paddingTop: spacing.lg,
+    gap: spacing.lg,
   },
-  header: {
+  hero: {
     alignItems: 'center',
-    marginBottom: spacing.xxl,
+    marginTop: spacing.lg,
   },
   logoCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: colors.primaryLight,
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: '#DFF5E6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-  title: {
+  heroTitle: {
     ...typography.headline,
-    fontSize: 26,
-    color: colors.primaryDark,
-    marginBottom: spacing.xxs,
+    fontSize: 42,
+    color: '#216E40',
   },
-  subtitle: {
-    ...typography.subhead,
-    color: colors.textSecondary,
+  heroSubtitle: {
+    ...typography.subheadBold,
+    color: '#5F5F5F',
+    marginTop: spacing.xs,
   },
-  form: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  formCard: {
+    padding: spacing.lg,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#ECECEC',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 5,
   },
   errorBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    minHeight: 40,
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.errorBg,
-    padding: spacing.sm,
-    borderRadius: radius.sm,
     marginBottom: spacing.md,
     gap: spacing.xs,
   },
   errorText: {
-    flex: 1,
     ...typography.body,
-    color: colors.error,
+    flex: 1,
   },
   row: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xl,
+    gap: spacing.sm,
   },
   checkboxRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
   },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.xs,
+    width: 20,
+    height: 20,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: colors.textHint,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.xs,
   },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
   checkboxLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
+    ...typography.subhead,
+    color: '#666666',
   },
   forgotLink: {
-    ...typography.bodyBold,
-    color: colors.primary,
+    ...typography.subheadBold,
+    color: '#2E9B57',
   },
   button: {
-    marginTop: 0,
+    borderRadius: 14,
   },
   switchContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.xl,
+    justifyContent: 'center',
+    marginTop: spacing.lg,
   },
   switchText: {
-    ...typography.subhead,
-    color: colors.textSecondary,
+    ...typography.body,
+    color: '#5F5F5F',
   },
   switchLink: {
-    ...typography.subhead,
-    fontWeight: '600',
-    color: colors.primary,
+    ...typography.bodyBold,
+    color: '#2E9B57',
   },
 });

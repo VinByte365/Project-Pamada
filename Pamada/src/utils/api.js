@@ -8,8 +8,12 @@ const NETWORK_ERROR_MESSAGE =
  */
 export async function apiRequest(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const isFormData =
+    typeof FormData !== 'undefined' &&
+    options.body &&
+    options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...options.headers,
   };
   if (options.token) {
@@ -18,10 +22,7 @@ export async function apiRequest(endpoint, options = {}) {
 
   let response;
   try {
-    response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    response = await fetch(url, { ...options, headers });
   } catch (err) {
     const isNetworkError =
       err.message === 'Network request failed' ||

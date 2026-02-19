@@ -74,13 +74,12 @@ plantSchema.virtual('age_in_months').get(function() {
 });
 
 // Generate unique plant ID
-plantSchema.pre('save', async function(next) {
+plantSchema.pre('save', async function() {
   if (!this.plant_id) {
     const count = await mongoose.model('Plant').countDocuments();
     const year = new Date().getFullYear();
     this.plant_id = `ALV-${year}-${String(count + 1).padStart(4, '0')}`;
   }
-  next();
 });
 
 plantSchema.set('toJSON', { virtuals: true });

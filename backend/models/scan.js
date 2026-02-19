@@ -117,13 +117,12 @@ const scanSchema = new mongoose.Schema({
 });
 
 // Generate unique scan ID
-scanSchema.pre('save', async function(next) {
+scanSchema.pre('save', async function() {
   if (!this.scan_id) {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substr(2, 9).toUpperCase();
     this.scan_id = `SCAN-${timestamp}-${random}`;
   }
-  next();
 });
 
 // Compound indexes for efficient queries

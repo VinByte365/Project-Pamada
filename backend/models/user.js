@@ -26,15 +26,64 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String
   },
+  profile_image: {
+    url: {
+      type: String,
+      default: ''
+    },
+    public_id: {
+      type: String,
+      default: ''
+    }
+  },
   preferences: {
     notification_enabled: {
       type: Boolean,
       default: true
     },
+    push_notifications: {
+      type: Boolean,
+      default: true
+    },
+    email_notifications: {
+      type: Boolean,
+      default: true
+    },
+    disease_alert_notifications: {
+      type: Boolean,
+      default: true
+    },
+    scan_reminder_notifications: {
+      type: Boolean,
+      default: true
+    },
+    weekly_report_notifications: {
+      type: Boolean,
+      default: false
+    },
+    login_alerts: {
+      type: Boolean,
+      default: true
+    },
+    data_sharing_consent: {
+      type: Boolean,
+      default: false
+    },
+    profile_visibility: {
+      type: String,
+      enum: ['private', 'team'],
+      default: 'private'
+    },
+    two_factor_enabled: {
+      type: Boolean,
+      default: false
+    },
     language: {
       type: String,
       default: 'en'
-    }
+    },
+    location: String,
+    farm_size: String
   },
   is_active: {
     type: Boolean,

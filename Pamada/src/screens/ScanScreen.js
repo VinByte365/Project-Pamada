@@ -1,656 +1,321 @@
 import React, { useState, useRef } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  ActivityIndicator,
   Image,
   Modal,
-  ActivityIndicator,
-  Dimensions,
   ScrollView,
   StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAppData } from '../contexts/AppDataContext';
-import { colors, spacing, radius, typography, shadows } from '../theme';
-
-const { width } = Dimensions.get('window');
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  permissionContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.xl,
-  },
-  permissionIconWrapper: {
-    marginBottom: spacing.lg,
-  },
-  permissionTitle: {
-    ...typography.title,
-    textAlign: 'center',
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
-  },
-  permissionDescription: {
-    ...typography.body,
-    textAlign: 'center',
-    color: colors.text.secondary,
-    marginBottom: spacing.xl,
-    lineHeight: 20,
-  },
-  permissionButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    ...shadows.sm,
-  },
-  permissionButtonText: {
-    color: colors.white,
-    fontWeight: '700',
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  cameraContainer: {
-    flex: 1,
-    backgroundColor: colors.black,
-  },
-  scanFrameContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  scanFrame: {
-    width: width * 0.7,
-    height: width * 0.7,
-    borderWidth: 2,
-    borderColor: 'rgba(47, 143, 78, 0.4)',
-    backgroundColor: 'transparent',
-    borderRadius: radius.xl,
-    marginBottom: spacing.lg,
-    position: 'relative',
-  },
-  cornerMarker: {
-    position: 'absolute',
-    width: 32,
-    height: 32,
-    borderColor: 'rgba(47, 143, 78, 0.8)',
-  },
-  cornerTopLeft: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderTopLeftRadius: 16,
-  },
-  cornerTopRight: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderTopRightRadius: 16,
-  },
-  cornerBottomLeft: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderBottomLeftRadius: 16,
-  },
-  cornerBottomRight: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderBottomRightRadius: 16,
-  },
-  scanHint: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 999,
-  },
-  scanHintText: {
-    color: colors.white,
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  controlsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-  },
-  controlButton: {
-    padding: spacing.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 24,
-  },
-  captureButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  captureInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.success,
-  },
-  previewContainer: {
-    flex: 1,
-    backgroundColor: colors.black,
-  },
-  previewImage: {
-    flex: 1,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewControls: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    gap: spacing.sm,
-  },
-  retakeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-  },
-  analyzeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    ...shadows.sm,
-  },
-  buttonText: {
-    color: colors.white,
-    fontSize: 13,
-    fontWeight: '700',
-    marginLeft: spacing.xs,
-  },
-  resultsModal: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  resultsContent: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    maxHeight: '80%',
-    overflow: 'hidden',
-  },
-  resultsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  resultsTitle: {
-    ...typography.title,
-    color: colors.text.primary,
-  },
-  resultsBody: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  resultSection: {
-    marginBottom: spacing.lg,
-  },
-  sectionLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: colors.text.secondary,
-    marginBottom: spacing.sm,
-  },
-  healthStatusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 999,
-  },
-  healthStatusBadgeHealthy: {
-    backgroundColor: '#ECFDF5',
-  },
-  healthStatusBadgeProblem: {
-    backgroundColor: '#FFFBEB',
-  },
-  healthStatusText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  healthStatusTextHealthy: {
-    color: '#047857',
-  },
-  healthStatusTextProblem: {
-    color: '#B45309',
-  },
-  maturityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  maturityBar: {
-    flex: 1,
-    height: 12,
-    backgroundColor: colors.borderLight,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  maturityFill: {
-    height: '100%',
-    backgroundColor: colors.success,
-    borderRadius: 6,
-  },
-  maturityText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.primary,
-    minWidth: 50,
-  },
-  diseaseItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBEB',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    marginBottom: spacing.xs,
-  },
-  diseaseText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginLeft: spacing.xs,
-    flex: 1,
-  },
-  recommendationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm,
-  },
-  recommendationText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginLeft: spacing.xs,
-    flex: 1,
-    lineHeight: 18,
-  },
-  confidenceCard: {
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.lg,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#BBFBEE',
-    backgroundColor: '#ECFDF5',
-  },
-  confidenceLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text.primary,
-  },
-  confidenceValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: spacing.xs,
-  },
-  saveButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    ...shadows.sm,
-  },
-  saveButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  loadingText: {
-    color: colors.white,
-    marginTop: spacing.md,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
+import useAppTheme from '../theme/useAppTheme';
+import { radius, shadows, spacing, typography } from '../theme';
+import ElevatedCard from '../components/ui/ElevatedCard';
+import ScanFrameOverlay from '../components/ui/ScanFrameOverlay';
+import StatusBadge from '../components/ui/StatusBadge';
+import ProgressRing from '../components/ui/ProgressRing';
 
 export default function ScanScreen() {
   const navigation = useNavigation();
-  const { addScan } = useAppData();
+  const { palette } = useAppTheme();
+  const { createScan, fetchScanById } = useAppData();
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [scannedImage, setScannedImage] = useState(null);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [scanResult, setScanResult] = useState(null);
+  const [error, setError] = useState('');
+  const [liveConfidence, setLiveConfidence] = useState('AI Ready');
   const cameraRef = useRef(null);
 
   if (!permission) {
-    return <View />;
+    return <View style={{ flex: 1 }} />;
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
-        <View style={styles.permissionIconWrapper}>
-          <Ionicons name="camera" size={64} color={colors.primary} />
-        </View>
-        <Text style={styles.permissionTitle}>Camera Permission Required</Text>
-        <Text style={styles.permissionDescription}>
-          We need your permission to use the camera for plant scanning.
-        </Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+      <View style={[styles.permissionContainer, { backgroundColor: palette.background.base }]}> 
+        <Ionicons name="camera" size={56} color={palette.primary.solid} />
+        <Text style={[styles.permissionTitle, { color: palette.text.primary }]}>Camera Permission Required</Text>
+        <Text style={[styles.permissionText, { color: palette.text.secondary }]}>Enable access to scan plant leaves and run AI diagnosis.</Text>
+        <TouchableOpacity
+          style={[styles.permissionButton, { backgroundColor: palette.primary.solid }]}
+          onPress={requestPermission}
+          accessibilityRole="button"
+          accessibilityLabel="Grant camera permission"
+        >
+          <Text style={[styles.permissionButtonText, { color: palette.primary.on }]}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      setLoading(true);
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          base64: true,
-        });
-        setScannedImage(photo.uri);
+  const formatScanResult = (scan) => {
+    const maturityMap = {
+      immature: 35,
+      maturing: 70,
+      optimal: 92,
+      'over-mature': 98,
+    };
 
-        setTimeout(() => {
-          const result = {
-            maturity: '87%',
-            maturityPercent: 87,
-            healthStatus: 'healthy',
-            diseases: [],
-            recommendations: [
-              'Plant is healthy and growing well',
-              'Expected harvest in 2-3 weeks',
-              'Maintain current watering schedule',
-            ],
-            confidence: '94%',
-          };
-          setScanResult(result);
-          addScan({
-            plantName: 'Field Scan - New',
-            date: '2026-02-07',
-            time: '04:45 PM',
-            status: 'healthy',
-            maturity: result.maturity,
-            maturityPercent: result.maturityPercent,
-            image: photo.uri,
-            diseases: result.diseases,
-          });
-          setShowResults(true);
-          setLoading(false);
-        }, 1800);
-      } catch (error) {
-        setLoading(false);
+    const maturityPercent = maturityMap[scan?.analysis_result?.maturity_assessment] ?? 70;
+    const primaryClass =
+      scan?.yolo_predictions?.[0]?.class || (scan?.analysis_result?.disease_detected ? 'leaf_spot' : 'healthy');
+    const diseases = (scan?.yolo_predictions || [])
+      .filter((pred) => pred.class && pred.class !== 'healthy')
+      .map((pred) => pred.class.replace(/_/g, ' '));
+    const recommendations = [
+      ...(scan?.recommendations?.treatment_plan || []),
+      ...(scan?.recommendations?.preventive_measures || []),
+    ];
+    const confidenceScore = scan?.analysis_result?.confidence_score || scan?.yolo_predictions?.[0]?.confidence;
+    const confidence = confidenceScore ? `${Math.round(confidenceScore * 100)}%` : 'N/A';
+
+    return {
+      maturity: `${maturityPercent}%`,
+      maturityPercent,
+      healthStatus: primaryClass === 'healthy' ? 'healthy' : primaryClass,
+      diseases: diseases.length ? diseases : [],
+      recommendations: recommendations.length ? recommendations : ['Scan saved. Analysis will update shortly.'],
+      confidence,
+      confidenceNumber: confidenceScore ? Math.round(confidenceScore * 100) : 0,
+    };
+  };
+
+  const pollForAnalysis = async (scanId, attempts = 6) => {
+    for (let i = 0; i < attempts; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const updated = await fetchScanById(scanId);
+      if (
+        updated?.analysis_result?.confidence_score !== undefined ||
+        updated?.analysis_result?.health_score !== undefined
+      ) {
+        return updated;
       }
+    }
+    return null;
+  };
+
+  const runScan = async (imageUri) => {
+    setLoading(true);
+    setError('');
+    setScannedImage(imageUri);
+    setLiveConfidence('Analyzing...');
+
+    try {
+      const createdScan = await createScan({ imageUri });
+      if (!createdScan?._id) {
+        throw new Error('Scan could not be created. Please try again.');
+      }
+      const analyzed = await pollForAnalysis(createdScan._id);
+      const scanData = analyzed || createdScan;
+      const formatted = formatScanResult(scanData);
+      setScanResult(formatted);
+      setLiveConfidence(`Confidence ${formatted.confidence}`);
+      setShowResults(true);
+    } catch (err) {
+      setError(err.message || 'Unable to analyze image.');
+      setLiveConfidence('AI Ready');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const takePicture = async () => {
+    if (!cameraRef.current || loading) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      await runScan(photo.uri);
+    } catch (err) {
+      setError(err.message || 'Unable to capture image.');
+      setLoading(false);
     }
   };
 
   const pickImage = async () => {
+    if (loading) return;
     setLoading(true);
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
-      base64: true,
     });
 
     if (!result.canceled) {
-      setScannedImage(result.assets[0].uri);
-      setTimeout(() => {
-        const analysis = {
-          maturity: '92%',
-          maturityPercent: 92,
-          healthStatus: 'leaf_spot',
-          diseases: ['Leaf Spot detected'],
-          recommendations: [
-            'Apply fungicide treatment',
-            'Isolate plant if possible',
-            'Reduce watering frequency',
-          ],
-          confidence: '89%',
-        };
-        setScanResult(analysis);
-        addScan({
-          plantName: 'Gallery Scan - New',
-          date: '2026-02-07',
-          time: '04:52 PM',
-          status: 'leaf_spot',
-          maturity: analysis.maturity,
-          maturityPercent: analysis.maturityPercent,
-          image: result.assets[0].uri,
-          diseases: analysis.diseases,
-        });
-        setShowResults(true);
-        setLoading(false);
-      }, 1800);
-    } else {
-      setLoading(false);
+      await runScan(result.assets[0].uri);
+      return;
     }
+
+    setLoading(false);
   };
 
   const resetScan = () => {
     setScannedImage(null);
     setShowResults(false);
     setScanResult(null);
+    setError('');
+    setLiveConfidence('AI Ready');
   };
 
   const toggleCameraFacing = () => {
     setFacing((current) => (current === 'back' ? 'front' : 'back'));
   };
 
-  const renderCamera = () => (
-    <CameraView
-      style={styles.cameraContainer}
-      facing={facing}
-      ref={cameraRef}
-    >
-      <View style={styles.scanFrameContainer}>
-        <View style={styles.scanFrame}>
-          <View style={[styles.cornerMarker, styles.cornerTopLeft]} />
-          <View style={[styles.cornerMarker, styles.cornerTopRight]} />
-          <View style={[styles.cornerMarker, styles.cornerBottomLeft]} />
-          <View style={[styles.cornerMarker, styles.cornerBottomRight]} />
-        </View>
+  return (
+    <View style={[styles.container, { backgroundColor: palette.background.base }]}> 
+      {!scannedImage ? (
+        <CameraView style={styles.cameraView} facing={facing} ref={cameraRef}>
+          <LinearGradient
+            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.45)']}
+            style={StyleSheet.absoluteFill}
+          />
+          <ScanFrameOverlay confidence={liveConfidence} />
 
-        <View style={styles.scanHint}>
-          <Text style={styles.scanHintText}>Align Aloe Vera leaf within the frame</Text>
-        </View>
-      </View>
+          <View style={styles.topGlassWrap}>
+            <View style={[styles.topGlass, { backgroundColor: palette.surface.glass, borderColor: palette.surface.borderStrong }]}>
+              <Ionicons name="leaf-outline" size={18} color={palette.primary.solid} />
+              <Text style={[styles.topGlassText, { color: palette.text.primary }]}>Smart Scan Mode</Text>
+            </View>
+          </View>
 
-      <View style={styles.controlsContainer}>
-        <TouchableOpacity style={styles.controlButton} onPress={pickImage}>
-          <Ionicons name="images-outline" size={28} color={colors.white} />
-        </TouchableOpacity>
+          <View style={styles.controlsWrap}>
+            <View style={[styles.controls, { backgroundColor: 'rgba(16,20,18,0.72)', borderColor: 'rgba(255,255,255,0.2)' }]}>
+              <TouchableOpacity style={styles.controlButton} onPress={pickImage} accessibilityLabel="Pick image">
+                <Ionicons name="images-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.captureButton}
-          onPress={takePicture}
-          disabled={loading}
-        >
+              <TouchableOpacity
+                style={[styles.captureButton, { borderColor: '#FFFFFF' }]}
+                onPress={takePicture}
+                disabled={loading}
+                accessibilityLabel="Capture image"
+              >
+                <LinearGradient
+                  colors={[palette.primary.start, palette.primary.end]}
+                  style={styles.captureInner}
+                >
+                  {loading ? <ActivityIndicator color="#FFFFFF" /> : null}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.controlButton} onPress={toggleCameraFacing} accessibilityLabel="Switch camera">
+                <Ionicons name="camera-reverse-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </CameraView>
+      ) : (
+        <View style={styles.previewContainer}>
+          <Image source={{ uri: scannedImage }} style={styles.previewImage} resizeMode="cover" />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.72)']} style={styles.previewFade} />
+
           {loading ? (
-            <ActivityIndicator color={colors.white} size="large" />
-          ) : (
-            <View style={styles.captureInner} />
-          )}
-        </TouchableOpacity>
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={palette.primary.solid} />
+              <Text style={styles.loadingText}>Analyzing plant health...</Text>
+            </View>
+          ) : null}
 
-        <TouchableOpacity style={styles.controlButton} onPress={toggleCameraFacing}>
-          <Ionicons name="camera-reverse-outline" size={28} color={colors.white} />
-        </TouchableOpacity>
-      </View>
-    </CameraView>
-  );
+          {error ? (
+            <View style={styles.loadingOverlay}>
+              <Ionicons name="alert-circle" size={28} color={palette.status.warning} />
+              <Text style={styles.loadingText}>{error}</Text>
+            </View>
+          ) : null}
 
-  const renderPreview = () => (
-    <View style={styles.previewContainer}>
-      <Image source={{ uri: scannedImage }} style={styles.previewImage} resizeMode="contain" />
+          <View style={styles.previewControls}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { backgroundColor: 'rgba(255,255,255,0.16)' }]}
+              onPress={resetScan}
+            >
+              <Ionicons name="refresh-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.previewButtonText}>Retake</Text>
+            </TouchableOpacity>
 
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={colors.success} />
-          <Text style={styles.loadingText}>Analyzing plant health...</Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: palette.primary.solid }]}
+              onPress={() => scanResult && setShowResults(true)}
+              disabled={!scanResult}
+            >
+              <Ionicons name="analytics-outline" size={18} color={palette.primary.on} />
+              <Text style={[styles.previewButtonText, { color: palette.primary.on }]}>View Analysis</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
-      <View style={styles.previewControls}>
-        <TouchableOpacity style={styles.retakeButton} onPress={resetScan}>
-          <Ionicons name="close" size={22} color={colors.white} />
-          <Text style={styles.buttonText}>Retake</Text>
-        </TouchableOpacity>
+      <Modal visible={showResults} animationType="slide" transparent onRequestClose={() => setShowResults(false)}>
+        <View style={styles.modalBackDrop}>
+          <View style={[styles.modalSheet, { backgroundColor: palette.surface.light, borderColor: palette.surface.border, shadowColor: '#000000' }]}>
+            <View style={[styles.handle, { backgroundColor: palette.surface.borderStrong }]} />
 
-        <TouchableOpacity style={styles.analyzeButton} onPress={() => setShowResults(true)}>
-          <Ionicons name="analytics" size={22} color={colors.white} />
-          <Text style={styles.buttonText}>View Analysis</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: palette.text.primary }]}>Scan Analysis</Text>
+              <TouchableOpacity onPress={() => setShowResults(false)} accessibilityLabel="Close analysis">
+                <Ionicons name="close" size={22} color={palette.text.primary} />
+              </TouchableOpacity>
+            </View>
 
-  return (
-    <View style={styles.container}>
-      {!scannedImage ? renderCamera() : renderPreview()}
-
-      <Modal
-        visible={showResults}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowResults(false)}
-      >
-        <View style={styles.resultsModal}>
-          <View style={styles.resultsContent}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.resultsHeader}>
-                <Text style={styles.resultsTitle}>Scan Results</Text>
-                <TouchableOpacity onPress={() => setShowResults(false)}>
-                  <Ionicons name="close" size={24} color={colors.text.primary} />
-                </TouchableOpacity>
-              </View>
-
-              {scanResult && (
-                <View style={styles.resultsBody}>
-                  <View style={styles.resultSection}>
-                    <Text style={styles.sectionLabel}>Health Status</Text>
-                    <View
-                      style={[
-                        styles.healthStatusBadge,
-                        scanResult.healthStatus === 'healthy'
-                          ? styles.healthStatusBadgeHealthy
-                          : styles.healthStatusBadgeProblem,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.healthStatusText,
-                          scanResult.healthStatus === 'healthy'
-                            ? styles.healthStatusTextHealthy
-                            : styles.healthStatusTextProblem,
-                        ]}
-                      >
-                        {scanResult.healthStatus === 'healthy' ? 'Healthy' : 'Disease Detected'}
-                      </Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalContent}>
+              {scanResult ? (
+                <>
+                  <ElevatedCard style={styles.heroResultCard}>
+                    <View style={styles.heroRow}>
+                      <StatusBadge status={scanResult.healthStatus} label={scanResult.healthStatus === 'healthy' ? 'Healthy' : 'Detected Issue'} />
+                      <Text style={[styles.confidenceLabel, { color: palette.text.secondary }]}>{scanResult.confidence}</Text>
                     </View>
-                  </View>
+                    <View style={styles.ringCenter}>
+                      <ProgressRing progress={scanResult.maturityPercent} label="Maturity" tint={palette.primary.solid} size={96} />
+                    </View>
+                  </ElevatedCard>
 
-                  <View style={styles.resultSection}>
-                    <Text style={styles.sectionLabel}>Plant Maturity</Text>
-                    <View style={styles.maturityContainer}>
-                      <View style={styles.maturityBar}>
-                        <View
-                          style={[
-                            styles.maturityFill,
-                            { width: `${scanResult.maturityPercent}%` },
-                          ]}
-                        />
+                  {scanResult.diseases.length > 0 ? (
+                    <ElevatedCard style={styles.sectionCard}>
+                      <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Detected Diseases</Text>
+                      <View style={styles.listWrap}>
+                        {scanResult.diseases.map((disease, index) => (
+                          <View key={`${disease}-${index}`} style={styles.rowItem}>
+                            <Ionicons name="warning" size={16} color={palette.status.warning} />
+                            <Text style={[styles.rowText, { color: palette.text.secondary }]}>{disease}</Text>
+                          </View>
+                        ))}
                       </View>
-                      <Text style={styles.maturityText}>{scanResult.maturity}</Text>
-                    </View>
-                  </View>
+                    </ElevatedCard>
+                  ) : null}
 
-                  {scanResult.diseases.length > 0 && (
-                    <View style={styles.resultSection}>
-                      <Text style={styles.sectionLabel}>Detected Diseases</Text>
-                      {scanResult.diseases.map((disease, index) => (
-                        <View key={index} style={styles.diseaseItem}>
-                          <Ionicons name="warning" size={20} color={colors.warning} />
-                          <Text style={styles.diseaseText}>{disease}</Text>
+                  <ElevatedCard style={styles.sectionCard}>
+                    <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Recommendations</Text>
+                    <View style={styles.listWrap}>
+                      {scanResult.recommendations.map((rec, index) => (
+                        <View key={`${index}`} style={styles.rowItem}>
+                          <Ionicons name="checkmark-circle" size={16} color={palette.status.success} />
+                          <Text style={[styles.rowText, { color: palette.text.secondary }]}>{rec}</Text>
                         </View>
                       ))}
                     </View>
-                  )}
-
-                  <View style={styles.resultSection}>
-                    <Text style={styles.sectionLabel}>Recommendations</Text>
-                    {scanResult.recommendations.map((rec, index) => (
-                      <View key={index} style={styles.recommendationItem}>
-                        <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                        <Text style={styles.recommendationText}>{rec}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  <View style={styles.confidenceCard}>
-                    <Text style={styles.confidenceLabel}>AI Confidence</Text>
-                    <Text style={styles.confidenceValue}>{scanResult.confidence}</Text>
-                  </View>
+                  </ElevatedCard>
 
                   <TouchableOpacity
-                    style={styles.saveButton}
+                    style={[styles.saveButton, { backgroundColor: palette.primary.solid }]}
                     onPress={() => {
                       setShowResults(false);
                       navigation.navigate('History');
                     }}
                   >
-                    <Text style={styles.saveButtonText}>Save Results</Text>
+                    <Text style={[styles.saveText, { color: palette.primary.on }]}>Save to Plant Library</Text>
                   </TouchableOpacity>
-                </View>
-              )}
+                </>
+              ) : null}
             </ScrollView>
           </View>
         </View>
@@ -658,3 +323,233 @@ export default function ScanScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  permissionContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  permissionTitle: {
+    ...typography.title,
+    marginTop: spacing.md,
+  },
+  permissionText: {
+    ...typography.body,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
+  },
+  permissionButton: {
+    minHeight: 44,
+    borderRadius: radius.button,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+  },
+  permissionButtonText: {
+    ...typography.bodyBold,
+  },
+  cameraView: {
+    flex: 1,
+  },
+  topGlassWrap: {
+    position: 'absolute',
+    top: 68,
+    alignSelf: 'center',
+  },
+  topGlass: {
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  topGlassText: {
+    ...typography.caption,
+  },
+  controlsWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 34,
+    alignItems: 'center',
+  },
+  controls: {
+    width: '90%',
+    minHeight: 92,
+    borderRadius: radius.floating,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: spacing.sm,
+  },
+  controlButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  captureButton: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  previewFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 240,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    paddingHorizontal: spacing.lg,
+  },
+  loadingText: {
+    ...typography.bodyBold,
+    color: '#FFFFFF',
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  previewControls: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.lg,
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  secondaryButton: {
+    flex: 1,
+    borderRadius: radius.button,
+    minHeight: 48,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  primaryButton: {
+    flex: 1,
+    borderRadius: radius.button,
+    minHeight: 48,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  previewButtonText: {
+    ...typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalBackDrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalSheet: {
+    borderTopLeftRadius: radius.floating,
+    borderTopRightRadius: radius.floating,
+    borderWidth: 1,
+    maxHeight: '84%',
+    ...shadows.modal,
+  },
+  handle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.xs,
+  },
+  modalHeader: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    ...typography.title,
+  },
+  modalContent: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+    gap: spacing.sm,
+  },
+  heroResultCard: {
+    padding: spacing.md,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  confidenceLabel: {
+    ...typography.caption,
+  },
+  ringCenter: {
+    alignItems: 'center',
+  },
+  sectionCard: {
+    padding: spacing.md,
+  },
+  sectionTitle: {
+    ...typography.bodyBold,
+    marginBottom: spacing.xs,
+  },
+  listWrap: {
+    gap: spacing.xs,
+  },
+  rowItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
+  rowText: {
+    ...typography.body,
+    flex: 1,
+    lineHeight: 20,
+  },
+  saveButton: {
+    minHeight: 48,
+    borderRadius: radius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+  },
+  saveText: {
+    ...typography.bodyBold,
+  },
+});
