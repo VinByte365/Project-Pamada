@@ -6,6 +6,7 @@ class MLService {
   constructor() {
     this.baseURL = process.env.ML_SERVICE_URL || 'http://localhost:5000';
     this.timeout = parseInt(process.env.ML_SERVICE_TIMEOUT) || 30000;
+    this.maturityConfidenceThreshold = Number(process.env.MATURITY_CONFIDENCE_THRESHOLD || 0.2);
   }
 
   /**
@@ -16,26 +17,25 @@ class MLService {
    */
   async analyzeImage(imageBuffer, metadata = {}) {
     try {
-      const formData = new FormData();
-      formData.append('image', imageBuffer, {
-        filename: metadata.filename || 'scan.jpg',
-        contentType: 'image/jpeg'
-      });
-
-      const response = await axios.post(
-        `${this.baseURL}/predict`,
-        formData,
-        {
-          headers: formData.getHeaders(),
-          timeout: this.timeout
-        }
-      );
-
-      if (response.data.success) {
-        return response.data.data;
-      } else {
-        throw new Error(response.data.error || 'ML service error');
+      const diseaseResult = await this.analyzeDisease(imageBuffer, metadata);
+      let maturityResult = {
+        success: false,
+        error: 'Maturity analysis unavailable',
+        leaf_count: 0,
+        maturity_stage: 'No plant detected',
+        confidence_threshold: 0.5,
+        detections: [],
+      };
+      try {
+        maturityResult = await this.analyzeMaturity(imageBuffer, metadata);
+      } catch (maturityError) {
+        console.warn('Maturity endpoint unavailable, continuing with disease analysis:', maturityError.message);
       }
+
+      return {
+        ...diseaseResult,
+        maturity_data: maturityResult,
+      };
     } catch (error) {
       console.error('ML Service Error:', error.message);
       
@@ -49,6 +49,49 @@ class MLService {
       
       throw error;
     }
+  }
+
+  async analyzeDisease(imageBuffer, metadata = {}) {
+    const formData = new FormData();
+    formData.append('image', imageBuffer, {
+      filename: metadata.filename || 'scan.jpg',
+      contentType: 'image/jpeg'
+    });
+
+    const response = await axios.post(
+      `${this.baseURL}/predict`,
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: this.timeout
+      }
+    );
+
+    if (!response.data?.success) {
+      throw new Error(response.data?.error || 'ML disease endpoint error');
+    }
+
+    return response.data.data;
+  }
+
+  async analyzeMaturity(imageBuffer, metadata = {}) {
+    const formData = new FormData();
+    formData.append('image', imageBuffer, {
+      filename: metadata.filename || 'scan.jpg',
+      contentType: 'image/jpeg'
+    });
+    formData.append('confidence_threshold', String(this.maturityConfidenceThreshold));
+
+    const response = await axios.post(
+      `${this.baseURL}/predict/maturity`,
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: this.timeout
+      }
+    );
+
+    return response.data || {};
   }
 
   /**
@@ -109,7 +152,33 @@ class MLService {
    * @returns {Object} Comprehensive analysis result
    */
   generateAnalysisResult(mlResults, plant = null) {
-    const { yolo_predictions, visual_features, age_estimation, confidence_score } = mlResults;
+    const { yolo_predictions, visual_features, age_estimation, confidence_score, maturity_data } = mlResults;
+    const stageText = String(maturity_data?.maturity_stage || '');
+    const stageLower = stageText.toLowerCase();
+    const noPlantDetected = stageLower.includes('no plant detected');
+
+    if (noPlantDetected) {
+      return {
+        leaf_count: 0,
+        maturity_stage: 'No plant detected',
+        harvest_ready: false,
+        maturity_assessment: 'immature',
+        health_score: 0,
+        disease_detected: false,
+        disease_severity: 'none',
+        recommended_action: 'monitor_daily',
+        estimated_days_to_harvest: null,
+        confidence_score: 0,
+        recommendations: {
+          treatment_plan: [
+            'No plant detected. Retake the scan with one aloe vera plant centered and fully visible.',
+          ],
+          preventive_measures: [],
+          follow_up_required: true,
+          next_scan_date: null,
+        },
+      };
+    }
 
     // Determine primary disease/condition
     const primaryPrediction = yolo_predictions && yolo_predictions.length > 0
@@ -139,7 +208,9 @@ class MLService {
     healthScore = healthScore * (0.7 + colorIndex * 0.3);
 
     // Determine harvest readiness
-    const harvestReady = age_estimation?.maturity_assessment === 'optimal' &&
+    const maturityAssessment = this.mapMaturityAssessment(maturity_data?.maturity_stage, age_estimation?.maturity_assessment);
+    const estimatedDays = this.mapEstimatedDaysToHarvest(maturity_data?.maturity_stage, age_estimation?.estimated_days_to_harvest);
+    const harvestReady = maturityAssessment === 'optimal' &&
                          diseaseSeverity === 'none' &&
                          healthScore >= 80;
 
@@ -147,7 +218,7 @@ class MLService {
     let recommendedAction = 'monitor_daily';
     if (harvestReady) {
       recommendedAction = 'harvest_now';
-    } else if (age_estimation?.maturity_assessment === 'maturing' && diseaseSeverity === 'none') {
+    } else if (maturityAssessment === 'maturing' && diseaseSeverity === 'none') {
       recommendedAction = 'wait_2_weeks';
     } else if (diseaseSeverity !== 'none') {
       recommendedAction = 'treat_disease';
@@ -157,19 +228,48 @@ class MLService {
     const recommendations = this.generateRecommendations(
       primaryPrediction.class,
       diseaseSeverity,
-      age_estimation
+      {
+        maturity_assessment: maturityAssessment,
+        estimated_days_to_harvest: estimatedDays,
+      }
     );
 
     return {
+      leaf_count: Number(maturity_data?.leaf_count || 0),
+      maturity_stage: maturity_data?.maturity_stage || null,
       harvest_ready: harvestReady,
-      maturity_assessment: age_estimation?.maturity_assessment || 'maturing',
+      maturity_assessment: maturityAssessment,
       health_score: Math.round(healthScore),
       disease_detected: primaryPrediction.class !== 'healthy',
       disease_severity: diseaseSeverity,
       recommended_action: recommendedAction,
-      estimated_days_to_harvest: age_estimation?.estimated_days_to_harvest || 60,
-      confidence_score: confidence_score || 0.5
+      estimated_days_to_harvest: estimatedDays,
+      confidence_score: confidence_score || 0.5,
+      recommendations,
     };
+  }
+
+  mapMaturityAssessment(maturityStage, fallback = 'maturing') {
+    const stage = String(maturityStage || '').toLowerCase();
+    if (stage.includes('no plant detected')) return 'immature';
+    if (stage.includes('not ready')) return 'immature';
+    if (stage.includes('young')) return 'immature';
+    if (stage.includes('developing')) return 'maturing';
+    if (stage.includes('ready for harvest')) return 'optimal';
+    if (stage.includes('mature')) return 'optimal';
+    return fallback || 'maturing';
+  }
+
+  mapEstimatedDaysToHarvest(maturityStage, fallbackDays) {
+    const fallback = typeof fallbackDays === 'number' ? fallbackDays : 60;
+    const stage = String(maturityStage || '').toLowerCase();
+    if (stage.includes('no plant detected')) return null;
+    if (stage.includes('not ready')) return 90;
+    if (stage.includes('young')) return 90;
+    if (stage.includes('developing')) return 21;
+    if (stage.includes('ready for harvest')) return 0;
+    if (stage.includes('mature')) return 0;
+    return fallback;
   }
 
   /**

@@ -13,9 +13,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
-import Button from '../components/common/Button';
+import {
+  Alert as InlineAlert,
+  EnhancedButton,
+  EnhancedInput,
+} from '../components/common';
 import ElevatedCard from '../components/ui/ElevatedCard';
-import AuthTextField from '../components/auth/AuthTextField';
 import useAppTheme from '../theme/useAppTheme';
 import { spacing, typography } from '../theme';
 
@@ -156,34 +159,29 @@ export default function RegisterScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="leaf" size={44} color="#2E9B57" />
+            <View style={[styles.logoCircle, { backgroundColor: `${palette.primary.solid}1F` }]}>
+              <Ionicons name="leaf" size={44} color={palette.primary.solid} />
             </View>
-            <Text style={styles.heroTitle}>Pamada</Text>
-            <Text style={styles.heroSubtitle}>Create your account</Text>
+            <Text style={[styles.heroTitle, { color: palette.primary.end }]}>Pamada</Text>
+            <Text style={[styles.heroSubtitle, { color: palette.text.secondary }]}>Create your account</Text>
           </View>
 
           <ElevatedCard style={styles.formCard} floating>
             {error ? (
-              <View
-                style={[
-                  styles.errorBox,
-                  {
-                    backgroundColor: `${palette.status.danger}14`,
-                    borderColor: `${palette.status.danger}40`,
-                  },
-                ]}
-              >
-                <Ionicons name="alert-circle-outline" size={18} color={palette.status.danger} />
-                <Text style={[styles.errorText, { color: palette.status.danger }]}>{error}</Text>
-              </View>
+              <InlineAlert
+                type="error"
+                title="Registration failed"
+                message={error}
+                dismissible
+                onDismiss={() => setError('')}
+                style={styles.errorBox}
+              />
             ) : null}
 
             <View>
-              <AuthTextField
-                ref={fullNameRef}
+              <EnhancedInput
+                inputRef={fullNameRef}
                 label="Full Name"
-                icon=""
                 value={fullName}
                 onChangeText={(text) => {
                   setFullName(text);
@@ -191,19 +189,19 @@ export default function RegisterScreen({ navigation }) {
                 }}
                 onFocus={() => ensureVisible(fullNameRef)}
                 placeholder="John Doe"
+                leftIcon="person-outline"
                 autoCapitalize="words"
                 autoCorrect={false}
                 spellCheck={false}
                 returnKeyType="done"
                 blurOnSubmit
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
 
-              <AuthTextField
-                ref={emailRef}
+              <EnhancedInput
+                inputRef={emailRef}
                 label="Email"
-                icon=""
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -212,19 +210,19 @@ export default function RegisterScreen({ navigation }) {
                 onFocus={() => ensureVisible(emailRef)}
                 placeholder="you@example.com"
                 keyboardType="email-address"
+                leftIcon="mail-outline"
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
                 returnKeyType="done"
                 blurOnSubmit
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
 
-              <AuthTextField
-                ref={passwordRef}
+              <EnhancedInput
+                inputRef={passwordRef}
                 label="Password"
-                icon=""
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
@@ -234,19 +232,19 @@ export default function RegisterScreen({ navigation }) {
                 placeholder="********"
                 secureTextEntry={!showPassword}
                 onToggleSecure={() => setShowPassword((prev) => !prev)}
+                leftIcon="lock-closed-outline"
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
                 returnKeyType="done"
                 blurOnSubmit
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
 
-              <AuthTextField
-                ref={confirmPasswordRef}
+              <EnhancedInput
+                inputRef={confirmPasswordRef}
                 label="Confirm Password"
-                icon=""
                 value={confirmPassword}
                 onChangeText={(text) => {
                   setConfirmPassword(text);
@@ -256,39 +254,47 @@ export default function RegisterScreen({ navigation }) {
                 placeholder="********"
                 secureTextEntry={!showConfirmPassword}
                 onToggleSecure={() => setShowConfirmPassword((prev) => !prev)}
+                leftIcon="shield-checkmark-outline"
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
                 returnKeyType="done"
                 blurOnSubmit
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
 
-              <AuthTextField
-                ref={phoneRef}
+              <EnhancedInput
+                inputRef={phoneRef}
                 label="Phone (optional)"
-                icon=""
                 value={phone}
                 onChangeText={setPhone}
                 onFocus={() => ensureVisible(phoneRef)}
                 placeholder="+1 234 567 8900"
                 keyboardType="phone-pad"
+                leftIcon="call-outline"
                 returnKeyType="done"
                 onSubmitEditing={Keyboard.dismiss}
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
             </View>
 
-            {validationError ? <Text style={styles.hint}>{validationError}</Text> : null}
+            {validationError ? <Text style={[styles.hint, { color: palette.status.warning }]}>{validationError}</Text> : null}
 
-            <Button label="Create Account" onPress={handleRegister} loading={loading} disabled={!isFormValid} style={styles.button} />
+            <EnhancedButton
+              label="Create Account"
+              onPress={handleRegister}
+              loading={loading}
+              disabled={!isFormValid}
+              style={styles.button}
+              fullWidth
+            />
 
             <View style={styles.switchContainer}>
-              <Text style={styles.switchText}>Already have an account? </Text>
+              <Text style={[styles.switchText, { color: palette.text.secondary }]}>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.replace('Login')} disabled={loading}>
-                <Text style={styles.switchLink}>Sign In</Text>
+                <Text style={[styles.switchLink, { color: palette.primary.solid }]}>Sign In</Text>
               </TouchableOpacity>
             </View>
           </ElevatedCard>
@@ -301,7 +307,7 @@ export default function RegisterScreen({ navigation }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F3F4F4',
+    backgroundColor: 'transparent',
   },
   keyboardView: {
     flex: 1,
@@ -324,7 +330,6 @@ const styles = StyleSheet.create({
     width: 112,
     height: 112,
     borderRadius: 56,
-    backgroundColor: '#DFF5E6',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
@@ -332,41 +337,20 @@ const styles = StyleSheet.create({
   heroTitle: {
     ...typography.headline,
     fontSize: 42,
-    color: '#216E40',
   },
   heroSubtitle: {
     ...typography.subheadBold,
-    color: '#5F5F5F',
     marginTop: spacing.xs,
   },
   formCard: {
     padding: spacing.lg,
     borderRadius: 28,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#ECECEC',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 5,
   },
   errorBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 40,
-    paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: spacing.md,
-    gap: spacing.xs,
-  },
-  errorText: {
-    ...typography.body,
-    flex: 1,
   },
   hint: {
     ...typography.caption,
-    color: '#D0891D',
     marginTop: -spacing.xs,
     marginBottom: spacing.md,
   },
@@ -381,10 +365,8 @@ const styles = StyleSheet.create({
   },
   switchText: {
     ...typography.body,
-    color: '#5F5F5F',
   },
   switchLink: {
     ...typography.bodyBold,
-    color: '#2E9B57',
   },
 });

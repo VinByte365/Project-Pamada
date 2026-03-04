@@ -5,7 +5,8 @@ const {
   createPlant,
   updatePlant,
   deletePlant,
-  getPlantsByStatus
+  getPlantsByStatus,
+  markPlantHarvested
 } = require('../controllers/plantController');
 const { protect } = require('../middlewares/auth');
 
@@ -25,6 +26,8 @@ router.route('/:id')
   .get(getPlant)
   .put(updatePlant)
   .delete(deletePlant);
+
+router.put('/:id/harvested', markPlantHarvested);
 
 module.exports = router;
 

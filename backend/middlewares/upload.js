@@ -1,4 +1,7 @@
 const multer = require('multer');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
@@ -29,10 +32,26 @@ const mediaFileFilter = (req, file, cb) => {
   }
 };
 
+const communityUploadDir = path.join(os.tmpdir(), 'pamada-community-uploads');
+if (!fs.existsSync(communityUploadDir)) {
+  fs.mkdirSync(communityUploadDir, { recursive: true });
+}
+
+const communityDiskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, communityUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '') || '';
+    const safeExt = ext.slice(0, 10);
+    cb(null, `community-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+  },
+});
+
 const mediaUpload = multer({
-  storage,
+  storage: communityDiskStorage,
   limits: {
-    fileSize: 25 * 1024 * 1024,
+    fileSize: parseInt(process.env.COMMUNITY_MEDIA_MAX_BYTES || `${200 * 1024 * 1024}`, 10),
   },
   fileFilter: mediaFileFilter,
 });

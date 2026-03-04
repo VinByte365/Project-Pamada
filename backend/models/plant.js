@@ -35,11 +35,16 @@ const plantSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    lifecycle_stage: {
+      type: String,
+      enum: ['growing', 'ready', 'harvested'],
+      default: 'growing'
+    },
     last_scan_date: Date,
     primary_condition: {
       type: String,
       enum: ['healthy', 'leaf_spot', 'root_rot', 'sunburn', 'aloe_rust', 
-             'bacterial_soft_rot', 'anthracnose', 'scale_insect']
+             'bacterial_soft_rot', 'anthracnose', 'scale_insect', 'mealybug', 'spider_mite']
     },
     disease_severity: {
       type: String,

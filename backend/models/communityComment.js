@@ -8,6 +8,12 @@ const commentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    parent_comment_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CommunityComment',
+      default: null,
+      index: true,
+    },
     user_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

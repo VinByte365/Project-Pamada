@@ -18,7 +18,7 @@ export default function Card({ children, style, padding = 'small', onPress, vari
       ? `${palette.status.success}1A`
       : variant === 'glass'
         ? palette.surface.glass
-        : palette.surface.light;
+        : palette.surface.elevated;
 
   const baseStyle = [
     styles.card,
@@ -49,6 +49,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.card,
     borderWidth: 1,
+    overflow: 'hidden',
     ...shadows.surface,
   },
   pressed: {

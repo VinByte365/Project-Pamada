@@ -15,18 +15,22 @@ def validate_image(image_file):
             return {'valid': False, 'error': 'File size exceeds 10MB limit'}
 
         try:
-            image = Image.open(BytesIO(image_file.read()))
+            image_bytes = image_file.read()
             image_file.seek(0)
 
-            if image.format not in ['JPEG', 'PNG', 'JPG', 'WEBP']:
-                return {'valid': False, 'error': f'Unsupported image format: {image.format}'}
+            with Image.open(BytesIO(image_bytes)) as image:
+                # Force decode to catch invalid/truncated files reliably.
+                image.load()
+                image_format = (image.format or '').upper()
+                if image_format not in ['JPEG', 'PNG', 'JPG', 'WEBP']:
+                    return {'valid': False, 'error': f'Unsupported image format: {image_format or "unknown"}'}
 
-            width, height = image.size
-            if width < 100 or height < 100:
-                return {'valid': False, 'error': 'Image dimensions too small (minimum 100x100)'}
+                width, height = image.size
+                if width < 100 or height < 100:
+                    return {'valid': False, 'error': 'Image dimensions too small (minimum 100x100)'}
 
-            if width > 5000 or height > 5000:
-                return {'valid': False, 'error': 'Image dimensions too large (maximum 5000x5000)'}
+                if width > 5000 or height > 5000:
+                    return {'valid': False, 'error': 'Image dimensions too large (maximum 5000x5000)'}
 
             return {'valid': True}
         except Exception as exc:

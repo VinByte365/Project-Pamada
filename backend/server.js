@@ -5,6 +5,8 @@ const http = require('http');
 const connectToDatabase = require('./config/database');
 const cloudinary = require('./config/cloudinary');
 const errorHandler = require('./middlewares/errorHandler');
+const requestContext = require('./middlewares/requestContext');
+const notFound = require('./middlewares/notFound');
 const chatbotRoutes = require('./routes/chatbot');
 const { initSocket } = require('./socket');
 const dotenv = require('dotenv');
@@ -21,6 +23,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN?.split(',') || '*',
   credentials: true
 }));
+app.use(requestContext);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -51,10 +54,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handler (must be last)
+// Not found + error handler (must be last)
+app.use(notFound);
 app.use(errorHandler);
 
 initSocket(server);
+server.setTimeout(parseInt(process.env.SERVER_TIMEOUT_MS || '600000', 10));
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);

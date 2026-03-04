@@ -5,14 +5,18 @@ import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
 import ChatbotScreen from '../screens/ChatbotScreen';
 import ScanScreen from '../screens/ScanScreen';
+import CaptureImageScanScreen from '../screens/CaptureImageScanScreen';
+import LiveImagingScreen from '../screens/LiveImagingScreen';
 import AccountSettingsScreen from '../screens/AccountSettingsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import PrivacySecurityScreen from '../screens/PrivacySecurityScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
+import ReportIssueScreen from '../screens/ReportIssueScreen';
 import AboutPamadaScreen from '../screens/AboutPamadaScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import ConversationScreen from '../screens/ConversationScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
+import CreateCommunityPostScreen from '../screens/CreateCommunityPostScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { colors } from '../theme';
 
@@ -35,15 +39,19 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="Main" component={MainTabs} />
           <Stack.Screen name="Scan" component={ScanScreen} />
+          <Stack.Screen name="CaptureImageScan" component={CaptureImageScanScreen} />
+          <Stack.Screen name="LiveImaging" component={LiveImagingScreen} />
           <Stack.Screen name="Chatbot" component={ChatbotScreen} />
           <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
           <Stack.Screen name="NotificationsSettings" component={NotificationsScreen} />
           <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
           <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+          <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
           <Stack.Screen name="AboutPamada" component={AboutPamadaScreen} />
           <Stack.Screen name="Messages" component={MessagesScreen} />
           <Stack.Screen name="Conversation" component={ConversationScreen} />
           <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
+          <Stack.Screen name="CreateCommunityPost" component={CreateCommunityPostScreen} />
         </>
       ) : (
         <Stack.Screen name="Auth" component={AuthStack} />

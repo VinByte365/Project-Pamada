@@ -1,48 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Linking,
-  Alert,
+  Image,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../contexts/AuthContext';
-import { apiRequest } from '../utils/api';
 import { colors, spacing, radius, typography, shadows } from '../theme';
 
 export default function AboutPamadaScreen({ navigation }) {
-  const { token } = useAuth();
-  const [about, setAbout] = useState(null);
+  const { width } = useWindowDimensions();
+  const cardWidth = width >= 420 ? '48.5%' : '100%';
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await apiRequest('/api/v1/settings/about', {
-          method: 'GET',
-          token,
-        });
-        setAbout(response?.data || null);
-      } catch (error) {
-        Alert.alert('Error', error.message || 'Failed to load app information');
-      }
-    };
-
-    load();
-  }, []);
-
-  const openLink = async (url) => {
-    if (!url) return;
-    const supported = await Linking.canOpenURL(url);
-    if (!supported) {
-      Alert.alert('Unavailable', 'Cannot open this URL on your device');
-      return;
-    }
-    Linking.openURL(url);
-  };
+  // TODO(edit-members): Replace these placeholders with actual group members and photos.
+  // Example image source once you add local assets:
+  // photo: require('../../assets/member-1.jpg')
+  const members = [
+    { id: 'member-1', name: 'Member 1', role: 'Role / Contribution', photo: null },
+    { id: 'member-2', name: 'Member 2', role: 'Role / Contribution', photo: null },
+    { id: 'member-3', name: 'Member 3', role: 'Role / Contribution', photo: null },
+    { id: 'member-4', name: 'Member 4', role: 'Role / Contribution', photo: null },
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -55,22 +37,34 @@ export default function AboutPamadaScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <Text style={styles.appName}>{about?.app_name || 'Pamada'}</Text>
-          <Text style={styles.description}>{about?.description || 'AI-powered Aloe Vera management app.'}</Text>
-          <Text style={styles.itemText}>Version: {about?.version || '1.0.0'}</Text>
-          <Text style={styles.itemText}>ML Model: {about?.ml_model || 'AV1.pt'}</Text>
+        <View style={styles.heroCard}>
+          <Text style={styles.pageTitle}>About Pamada</Text>
+          <Text style={styles.pageSubtitle}>
+            Pamada helps growers monitor Aloe Vera health with AI-powered scan analysis and actionable insights.
+          </Text>
         </View>
 
-        <TouchableOpacity style={styles.linkCard} onPress={() => openLink(about?.privacy_url)}>
-          <Text style={styles.linkText}>Privacy Policy</Text>
-          <Ionicons name="open-outline" size={18} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Team Members</Text>
+          <Text style={styles.sectionSubtitle}>Replace placeholders with your real member data and photos.</Text>
+        </View>
 
-        <TouchableOpacity style={styles.linkCard} onPress={() => openLink(about?.terms_url)}>
-          <Text style={styles.linkText}>Terms and Conditions</Text>
-          <Ionicons name="open-outline" size={18} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.grid}>
+          {members.map((member) => (
+            <View key={member.id} style={[styles.memberCard, { width: cardWidth }]}>
+              <View style={styles.photoPlaceholder}>
+                {member.photo ? (
+                  <Image source={member.photo} style={styles.memberPhoto} />
+                ) : (
+                  <Ionicons name="person-outline" size={34} color={colors.text.secondary} />
+                )}
+              </View>
+              <Text style={styles.memberName}>{member.name}</Text>
+              <Text style={styles.memberRole}>{member.role}</Text>
+              {/* TODO(edit-members): Replace placeholder text and photo for this member card. */}
+            </View>
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -102,44 +96,78 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenPadding,
     paddingBottom: spacing.xxl,
   },
-  card: {
+  heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     ...shadows.sm,
   },
-  appName: {
-    ...typography.titleLarge,
-    color: colors.text.primary,
+  sectionHead: {
     marginBottom: spacing.sm,
   },
-  description: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.md,
-  },
-  itemText: {
-    ...typography.bodyMedium,
+  sectionTitle: {
+    ...typography.bodyBold,
     color: colors.text.primary,
-    marginBottom: spacing.xs,
   },
-  linkCard: {
+  sectionSubtitle: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginTop: spacing.xxs,
+  },
+  pageTitle: {
+    ...typography.title,
+    color: colors.text.primary,
+  },
+  pageSubtitle: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginTop: spacing.xxs,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  memberCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    marginBottom: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    ...shadows.sm,
   },
-  linkText: {
+  photoPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  memberPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  memberName: {
     ...typography.bodyBold,
-    color: colors.primary,
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  memberRole: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing.xxs,
   },
 });

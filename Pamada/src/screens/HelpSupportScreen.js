@@ -1,100 +1,33 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import { useAuth } from '../contexts/AuthContext';
+import { useSnackbar } from '../contexts/SnackbarContext';
 import { apiRequest } from '../utils/api';
 import { colors, spacing, radius, typography, shadows } from '../theme';
 
-const AUTOFILL_BLOCK_PROPS = Platform.select({
-  android: {
-    autoComplete: 'off',
-    textContentType: 'none',
-    importantForAutofill: 'noExcludeDescendants',
-  },
-  ios: {
-    autoComplete: 'off',
-    textContentType: 'none',
-  },
-  default: {
-    autoComplete: 'off',
-  },
-});
-
 export default function HelpSupportScreen({ navigation }) {
   const { token } = useAuth();
+  const { showSnackbar } = useSnackbar();
   const insets = useSafeAreaInsets();
-
-  const scrollRef = useRef(null);
-  const scrollYRef = useRef(0);
-  const categoryRef = useRef(null);
-  const subjectRef = useRef(null);
-  const messageRef = useRef(null);
+  const { width } = useWindowDimensions();
+  const isCompact = width < 360;
 
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [contacts, setContacts] = useState(null);
   const [faq, setFaq] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [form, setForm] = useState({
-    category: 'general',
-    subject: '',
-    message: '',
-  });
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event?.endCoordinates?.height || 0);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const ensureVisible = (inputRef) => {
-    const field = inputRef?.current;
-    const scroll = scrollRef.current;
-    if (!field || !scroll || !keyboardHeight) return;
-
-    requestAnimationFrame(() => {
-      field.measureInWindow((x, y, width, height) => {
-        const windowHeight = Dimensions.get('window').height;
-        const keyboardTop = windowHeight - keyboardHeight;
-        const fieldBottom = y + height;
-        const safeGap = 18;
-
-        if (fieldBottom > keyboardTop - safeGap) {
-          const overlap = fieldBottom - (keyboardTop - safeGap);
-          scroll.scrollTo({
-            y: Math.max(0, scrollYRef.current + overlap + 20),
-            animated: true,
-          });
-        }
-      });
-    });
-  };
 
   const load = async () => {
     setLoading(true);
@@ -107,7 +40,7 @@ export default function HelpSupportScreen({ navigation }) {
       setFaq(response?.data?.faq || []);
       setTickets(response?.data?.recent_tickets || []);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to load help information');
+      showSnackbar({ type: 'error', message: error.message || 'Failed to load help information' });
     } finally {
       setLoading(false);
     }
@@ -117,27 +50,10 @@ export default function HelpSupportScreen({ navigation }) {
     load();
   }, []);
 
-  const submit = async () => {
-    if (!form.subject || !form.message) {
-      Alert.alert('Validation', 'Please fill in subject and message');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await apiRequest('/api/v1/settings/help', {
-        method: 'POST',
-        token,
-        body: JSON.stringify(form),
-      });
-      setForm({ category: 'general', subject: '', message: '' });
-      await load();
-      Alert.alert('Submitted', 'Your support ticket has been created');
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to submit ticket');
-    } finally {
-      setSubmitting(false);
-    }
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   };
 
   return (
@@ -150,98 +66,76 @@ export default function HelpSupportScreen({ navigation }) {
         <View style={styles.headerButton} />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.keyboard}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={insets.top}
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: Math.max(spacing.xxl, insets.bottom + spacing.lg) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={[styles.content, { paddingBottom: Math.max(spacing.xxl, insets.bottom + spacing.lg) }]}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode="none"
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-          onScroll={(event) => {
-            scrollYRef.current = event.nativeEvent.contentOffset.y;
-          }}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Contact</Text>
-            <Text style={styles.itemText}>Email: {contacts?.email || '-'}</Text>
-            <Text style={styles.itemText}>Hotline: {contacts?.hotline || '-'}</Text>
-            <Text style={styles.itemText}>Hours: {contacts?.hours || '-'}</Text>
-          </View>
+        <View style={styles.pageLead}>
+          <Text style={styles.pageTitle}>Help & Support</Text>
+          <Text style={styles.pageSubtitle}>Get help quickly, submit issues, and track ticket responses.</Text>
+        </View>
 
-          <View style={[styles.card, styles.ticketCard]}>
-            <Text style={styles.cardTitle}>Submit a Ticket</Text>
-            <Input
-              inputRef={categoryRef}
-              onFocus={() => ensureVisible(categoryRef)}
-              label="Category"
-              value={form.category}
-              onChangeText={(value) => setForm((prev) => ({ ...prev, category: value }))}
-              placeholder="general / technical / billing / feedback"
-              autoCapitalize="none"
-              returnKeyType="done"
-              blurOnSubmit
-              onSubmitEditing={Keyboard.dismiss}
-              {...AUTOFILL_BLOCK_PROPS}
-            />
-            <Input
-              inputRef={subjectRef}
-              onFocus={() => ensureVisible(subjectRef)}
-              label="Subject"
-              value={form.subject}
-              onChangeText={(value) => setForm((prev) => ({ ...prev, subject: value }))}
-              placeholder="Brief issue summary"
-              returnKeyType="done"
-              blurOnSubmit
-              onSubmitEditing={Keyboard.dismiss}
-              {...AUTOFILL_BLOCK_PROPS}
-            />
-            <Input
-              inputRef={messageRef}
-              onFocus={() => ensureVisible(messageRef)}
-              label="Message"
-              value={form.message}
-              onChangeText={(value) => setForm((prev) => ({ ...prev, message: value }))}
-              placeholder="Tell us what happened"
-              multiline
-              numberOfLines={4}
-              returnKeyType="done"
-              blurOnSubmit={false}
-              {...AUTOFILL_BLOCK_PROPS}
-            />
-            <Button label="Submit Ticket" onPress={submit} loading={submitting} disabled={loading} />
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Contact</Text>
+          <View style={styles.contactRow}>
+            <Ionicons name="mail-outline" size={16} color={colors.primaryDark} />
+            <Text style={styles.itemText}>{contacts?.email || '-'}</Text>
           </View>
+          <View style={styles.contactRow}>
+            <Ionicons name="call-outline" size={16} color={colors.primaryDark} />
+            <Text style={styles.itemText}>{contacts?.hotline || '-'}</Text>
+          </View>
+          <View style={styles.contactRow}>
+            <Ionicons name="time-outline" size={16} color={colors.primaryDark} />
+            <Text style={styles.itemText}>{contacts?.hours || '-'}</Text>
+          </View>
+        </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Recent Tickets</Text>
-            {tickets.length === 0 ? (
-              <Text style={styles.itemText}>No tickets yet.</Text>
-            ) : (
-              tickets.map((ticket) => (
-                <View key={ticket._id} style={styles.ticketRow}>
-                  <Text style={styles.ticketSubject}>{ticket.subject}</Text>
-                  <Text style={styles.ticketStatus}>{ticket.status.replace('_', ' ')}</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Report a New Issue</Text>
+          <Text style={styles.itemText}>Submit a manual ticket with screenshot and device details.</Text>
+          <Button
+            label="Open Report Form"
+            onPress={() => navigation.navigate('ReportIssue')}
+            disabled={loading}
+            style={{ marginTop: spacing.sm }}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Recent Tickets</Text>
+          {tickets.length === 0 ? (
+            <Text style={styles.itemText}>No tickets yet.</Text>
+          ) : (
+            tickets.map((ticket) => (
+              <View key={ticket._id} style={styles.ticketRow}>
+                <View style={styles.ticketMain}>
+                  <Text style={styles.ticketSubject}>{ticket.ticket_number || 'Pending ticket number'}</Text>
+                  <Text style={styles.ticketMeta}>{ticket.issue_category_label || 'Other'}</Text>
+                  <Text style={styles.ticketMeta}>{new Date(ticket.createdAt).toLocaleString()}</Text>
                 </View>
-              ))
-            )}
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>FAQ</Text>
-            {faq.map((item, index) => (
-              <View key={`${item.question}-${index}`} style={styles.faqItem}>
-                <Text style={styles.faqQuestion}>{item.question}</Text>
-                <Text style={styles.faqAnswer}>{item.answer}</Text>
+                <View style={styles.statusChip}>
+                  <Text style={styles.ticketStatus}>{String(ticket.status || 'open').replace('_', ' ')}</Text>
+                </View>
               </View>
-            ))}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            ))
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>FAQ</Text>
+          {faq.map((item, index) => (
+            <View key={`${item.question}-${index}`} style={[styles.faqItem, index === faq.length - 1 && styles.faqItemLast]}>
+              <View style={styles.faqQuestionRow}>
+                <Ionicons name="help-circle-outline" size={isCompact ? 15 : 16} color={colors.primaryDark} />
+                <Text style={styles.faqQuestion}>{item.question}</Text>
+              </View>
+              <Text style={styles.faqAnswer}>{item.answer}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -250,9 +144,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  keyboard: {
-    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -275,6 +166,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenPadding,
     paddingBottom: spacing.xxl,
   },
+  pageLead: {
+    marginBottom: spacing.md,
+  },
+  pageTitle: {
+    ...typography.bodyBold,
+    fontSize: 20,
+    color: colors.text.primary,
+  },
+  pageSubtitle: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginTop: spacing.xxs,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -284,9 +188,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     ...shadows.sm,
   },
-  ticketCard: {
-    marginBottom: spacing.lg,
-  },
   cardTitle: {
     ...typography.bodyBold,
     color: colors.text.primary,
@@ -295,38 +196,75 @@ const styles = StyleSheet.create({
   itemText: {
     ...typography.body,
     color: colors.text.secondary,
+    flex: 1,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginBottom: spacing.xs,
   },
   ticketRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+    gap: spacing.sm,
+  },
+  ticketMain: {
+    flex: 1,
   },
   ticketSubject: {
     ...typography.bodyMedium,
     color: colors.text.primary,
     flex: 1,
-    paddingRight: spacing.sm,
+  },
+  ticketMeta: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  statusChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
   },
   ticketStatus: {
     ...typography.caption,
     color: colors.primary,
     textTransform: 'capitalize',
+    fontWeight: '700',
   },
   faqItem: {
     marginBottom: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  faqItemLast: {
+    marginBottom: 0,
+    paddingBottom: 0,
+    borderBottomWidth: 0,
+  },
+  faqQuestionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
   },
   faqQuestion: {
     ...typography.bodyBold,
     color: colors.text.primary,
-    marginBottom: spacing.xs,
+    flex: 1,
   },
   faqAnswer: {
     ...typography.body,
     color: colors.text.secondary,
+    marginTop: spacing.xxs,
   },
 });
 

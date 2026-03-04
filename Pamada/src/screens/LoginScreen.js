@@ -3,6 +3,7 @@ import {
   Dimensions,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,9 +15,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
-import Button from '../components/common/Button';
+import { apiRequest } from '../utils/api';
+import {
+  Alert as InlineAlert,
+  EnhancedButton,
+  EnhancedInput,
+} from '../components/common';
 import ElevatedCard from '../components/ui/ElevatedCard';
-import AuthTextField from '../components/auth/AuthTextField';
 import useAppTheme from '../theme/useAppTheme';
 import { spacing, typography } from '../theme';
 
@@ -54,7 +59,17 @@ export default function LoginScreen({ navigation }) {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [forgotVisible, setForgotVisible] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotInfo, setForgotInfo] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [forgotStep, setForgotStep] = useState('request');
 
   useEffect(() => {
     let mounted = true;
@@ -118,6 +133,7 @@ export default function LoginScreen({ navigation }) {
 
     Keyboard.dismiss();
     setError('');
+    setNotice('');
     setLoading(true);
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -133,6 +149,96 @@ export default function LoginScreen({ navigation }) {
       setError(err.message || err.data?.error || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openForgotPassword = () => {
+    setForgotError('');
+    setForgotInfo('');
+    setForgotStep('request');
+    setForgotEmail(email.trim().toLowerCase());
+    setVerificationCode('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setForgotVisible(true);
+  };
+
+  const sendResetCode = async () => {
+    const normalizedEmail = forgotEmail.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      setForgotError('Please enter a valid email address.');
+      return;
+    }
+
+    setForgotLoading(true);
+    setForgotError('');
+    setForgotInfo('');
+    try {
+      const response = await apiRequest('/api/v1/auth/forgotpassword', {
+        method: 'POST',
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      setForgotStep('reset');
+      setForgotInfo(response?.message || 'Verification code sent. Check your email.');
+    } catch (err) {
+      setForgotError(err.message || 'Failed to send verification code.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const submitPasswordReset = async () => {
+    const normalizedEmail = forgotEmail.trim().toLowerCase();
+    const code = verificationCode.trim();
+
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      setForgotError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!code) {
+      setForgotError('Please enter the verification code.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setForgotError('New password must be at least 6 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setForgotError('Passwords do not match.');
+      return;
+    }
+
+    setForgotLoading(true);
+    setForgotError('');
+    setForgotInfo('');
+    try {
+      const response = await apiRequest('/api/v1/auth/resetpassword', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: normalizedEmail,
+          code,
+          newPassword,
+        }),
+      });
+
+      setForgotVisible(false);
+      setError('');
+      setPassword('');
+      setEmail(normalizedEmail);
+      setForgotInfo('');
+      setForgotError('');
+      setForgotStep('request');
+      setVerificationCode('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setNotice(response?.message || 'Password reset successful. Please sign in.');
+    } catch (err) {
+      setForgotError(err.message || 'Failed to reset password.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -160,38 +266,44 @@ export default function LoginScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="leaf" size={44} color="#2E9B57" />
+            <View style={[styles.logoCircle, { backgroundColor: `${palette.primary.solid}1F` }]}>
+              <Ionicons name="leaf" size={44} color={palette.primary.solid} />
             </View>
-            <Text style={styles.heroTitle}>Pamada</Text>
-            <Text style={styles.heroSubtitle}>Sign in to your account</Text>
+            <Text style={[styles.heroTitle, { color: palette.primary.end }]}>Pamada</Text>
+            <Text style={[styles.heroSubtitle, { color: palette.text.secondary }]}>Sign in to your account</Text>
           </View>
 
           <ElevatedCard style={styles.formCard} floating>
             {error ? (
-              <View
-                style={[
-                  styles.errorBox,
-                  {
-                    backgroundColor: `${palette.status.danger}14`,
-                    borderColor: `${palette.status.danger}40`,
-                  },
-                ]}
-              >
-                <Ionicons name="alert-circle-outline" size={18} color={palette.status.danger} />
-                <Text style={[styles.errorText, { color: palette.status.danger }]}>{error}</Text>
-              </View>
+              <InlineAlert
+                type="error"
+                title="Sign in failed"
+                message={error}
+                dismissible
+                onDismiss={() => setError('')}
+                style={styles.errorBox}
+              />
+            ) : null}
+            {notice ? (
+              <InlineAlert
+                type="success"
+                title="Success"
+                message={notice}
+                dismissible
+                onDismiss={() => setNotice('')}
+                style={styles.errorBox}
+              />
             ) : null}
 
             <View>
-              <AuthTextField
-                ref={emailRef}
+              <EnhancedInput
+                inputRef={emailRef}
                 label="Email"
-                icon=""
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
                   if (error) setError('');
+                  if (notice) setNotice('');
                 }}
                 onFocus={() => ensureVisible(emailRef)}
                 placeholder="you@example.com"
@@ -199,20 +311,21 @@ export default function LoginScreen({ navigation }) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
+                leftIcon="mail-outline"
                 returnKeyType="done"
                 blurOnSubmit
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
 
-              <AuthTextField
-                ref={passwordRef}
+              <EnhancedInput
+                inputRef={passwordRef}
                 label="Password"
-                icon=""
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
                   if (error) setError('');
+                  if (notice) setNotice('');
                 }}
                 onFocus={() => ensureVisible(passwordRef)}
                 placeholder="********"
@@ -221,9 +334,10 @@ export default function LoginScreen({ navigation }) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
+                leftIcon="lock-closed-outline"
                 returnKeyType="done"
                 onSubmitEditing={Keyboard.dismiss}
-                editable={!loading}
+                disabled={loading}
                 {...AUTOFILL_BLOCK_PROPS}
               />
             </View>
@@ -241,32 +355,149 @@ export default function LoginScreen({ navigation }) {
                   style={[
                     styles.checkbox,
                     {
-                      borderColor: rememberMe ? '#7CC191' : '#A7A7A7',
-                      backgroundColor: rememberMe ? '#7CC191' : '#FFFFFF',
+                      borderColor: rememberMe ? palette.accent.action : palette.surface.borderStrong,
+                      backgroundColor: rememberMe ? palette.accent.action : palette.surface.light,
                     },
                   ]}
                 >
-                  {rememberMe ? <Ionicons name="checkmark" size={13} color="#FFFFFF" /> : null}
+                  {rememberMe ? <Ionicons name="checkmark" size={13} color={palette.accent.on} /> : null}
                 </View>
-                <Text style={styles.checkboxLabel}>Remember Me</Text>
+                <Text style={[styles.checkboxLabel, { color: palette.text.secondary }]}>Remember Me</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity disabled={loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.forgotLink}>Forgot Password?</Text>
+              <TouchableOpacity
+                disabled={loading}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={openForgotPassword}
+              >
+                <Text style={[styles.forgotLink, { color: palette.primary.solid }]}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
 
-            <Button label="Sign In" onPress={handleLogin} loading={loading} disabled={!isFormValid} style={styles.button} />
+            <EnhancedButton
+              label="Sign In"
+              onPress={handleLogin}
+              loading={loading}
+              disabled={!isFormValid}
+              style={styles.button}
+              fullWidth
+            />
 
             <View style={styles.switchContainer}>
-              <Text style={styles.switchText}>Don't have an account? </Text>
+              <Text style={[styles.switchText, { color: palette.text.secondary }]}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => navigation.replace('Register')} disabled={loading}>
-                <Text style={styles.switchLink}>Register</Text>
+                <Text style={[styles.switchLink, { color: palette.primary.solid }]}>Register</Text>
               </TouchableOpacity>
             </View>
           </ElevatedCard>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={forgotVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setForgotVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
+            <Text style={[styles.modalTitle, { color: palette.text.primary }]}>Reset Password</Text>
+            <Text style={[styles.modalSubtitle, { color: palette.text.secondary }]}>
+              {forgotStep === 'request'
+                ? 'Enter your registered email to receive a verification code.'
+                : 'Enter the code from your email and set your new password.'}
+            </Text>
+
+            {forgotError ? (
+              <InlineAlert type="error" title="Reset failed" message={forgotError} dismissible onDismiss={() => setForgotError('')} />
+            ) : null}
+            {forgotInfo ? (
+              <InlineAlert type="success" title="Success" message={forgotInfo} dismissible onDismiss={() => setForgotInfo('')} />
+            ) : null}
+
+            <EnhancedInput
+              label="Email"
+              value={forgotEmail}
+              onChangeText={setForgotEmail}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              leftIcon="mail-outline"
+              disabled={forgotLoading}
+              {...AUTOFILL_BLOCK_PROPS}
+            />
+
+            {forgotStep === 'reset' ? (
+              <>
+                <EnhancedInput
+                  label="Verification Code"
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  placeholder="6-digit code"
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  leftIcon="key-outline"
+                  disabled={forgotLoading}
+                  {...AUTOFILL_BLOCK_PROPS}
+                />
+
+                <EnhancedInput
+                  label="New Password"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="********"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  leftIcon="lock-closed-outline"
+                  disabled={forgotLoading}
+                  {...AUTOFILL_BLOCK_PROPS}
+                />
+
+                <EnhancedInput
+                  label="Confirm New Password"
+                  value={confirmNewPassword}
+                  onChangeText={setConfirmNewPassword}
+                  placeholder="********"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  leftIcon="shield-checkmark-outline"
+                  disabled={forgotLoading}
+                  {...AUTOFILL_BLOCK_PROPS}
+                />
+              </>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <EnhancedButton
+                type="secondary"
+                label="Cancel"
+                onPress={() => setForgotVisible(false)}
+                disabled={forgotLoading}
+                style={styles.modalBtn}
+              />
+              {forgotStep === 'request' ? (
+                <EnhancedButton
+                  label="Send Code"
+                  onPress={sendResetCode}
+                  loading={forgotLoading}
+                  style={styles.modalBtn}
+                />
+              ) : (
+                <EnhancedButton
+                  label="Reset Password"
+                  onPress={submitPasswordReset}
+                  loading={forgotLoading}
+                  style={styles.modalBtn}
+                />
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -274,7 +505,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F3F4F4',
+    backgroundColor: 'transparent',
   },
   keyboardView: {
     flex: 1,
@@ -297,7 +528,6 @@ const styles = StyleSheet.create({
     width: 112,
     height: 112,
     borderRadius: 56,
-    backgroundColor: '#DFF5E6',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
@@ -305,37 +535,17 @@ const styles = StyleSheet.create({
   heroTitle: {
     ...typography.headline,
     fontSize: 42,
-    color: '#216E40',
   },
   heroSubtitle: {
     ...typography.subheadBold,
-    color: '#5F5F5F',
     marginTop: spacing.xs,
   },
   formCard: {
     padding: spacing.lg,
     borderRadius: 28,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#ECECEC',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 5,
   },
   errorBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 40,
-    paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: spacing.md,
-    gap: spacing.xs,
-  },
-  errorText: {
-    ...typography.body,
-    flex: 1,
   },
   row: {
     marginTop: spacing.xs,
@@ -361,11 +571,9 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     ...typography.subhead,
-    color: '#666666',
   },
   forgotLink: {
     ...typography.subheadBold,
-    color: '#2E9B57',
   },
   button: {
     borderRadius: 14,
@@ -378,10 +586,37 @@ const styles = StyleSheet.create({
   },
   switchText: {
     ...typography.body,
-    color: '#5F5F5F',
   },
   switchLink: {
     ...typography.bodyBold,
-    color: '#2E9B57',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.screenPadding,
+  },
+  modalCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: spacing.md,
+  },
+  modalTitle: {
+    ...typography.title,
+  },
+  modalSubtitle: {
+    ...typography.caption,
+    marginTop: spacing.xxs,
+    marginBottom: spacing.sm,
+  },
+  modalActions: {
+    marginTop: spacing.xs,
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  modalBtn: {
+    flex: 1,
   },
 });

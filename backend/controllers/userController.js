@@ -1,6 +1,8 @@
 const User = require('../models/user');
+const Notification = require('../models/notification');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/controllerWrapper');
+const { emitToUser } = require('../socket');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -51,7 +53,8 @@ exports.register = asyncHandler(async (req, res) => {
         farm_details: user.farm_details,
         phone: user.phone || '',
         preferences: user.preferences,
-        profile_image: user.profile_image
+        profile_image: user.profile_image,
+        cover_image: user.cover_image
       },
       token
     }
@@ -100,9 +103,33 @@ exports.login = asyncHandler(async (req, res) => {
     });
   }
 
+  const previousLastLogin = user.last_login;
+
   // Update last login
   user.last_login = new Date();
   await user.save();
+
+  if (
+    previousLastLogin
+    && user.preferences?.notification_enabled !== false
+    && user.preferences?.login_alerts !== false
+  ) {
+    const notification = await Notification.create({
+      user_id: user._id,
+      type: 'system_announcement',
+      reference_id: '',
+      message: `New login detected on ${new Date().toLocaleString()}.`,
+    });
+
+    emitToUser(String(user._id), 'notification:new', {
+      id: notification._id,
+      type: notification.type,
+      reference_id: notification.reference_id,
+      message: notification.message,
+      is_read: notification.is_read,
+      created_at: notification.createdAt,
+    });
+  }
 
   const token = generateToken(user._id);
 
@@ -117,7 +144,8 @@ exports.login = asyncHandler(async (req, res) => {
         farm_details: user.farm_details,
         phone: user.phone || '',
         preferences: user.preferences,
-        profile_image: user.profile_image
+        profile_image: user.profile_image,
+        cover_image: user.cover_image
       },
       token
     }
@@ -219,4 +247,5 @@ exports.logout = asyncHandler(async (req, res) => {
     message: 'Logged out successfully'
   });
 });
+
 

@@ -6,6 +6,10 @@ const scanSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
+  scan_number: {
+    type: Number,
+    index: true
+  },
   plant_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Plant',
@@ -62,6 +66,8 @@ const scanSchema = new mongoose.Schema({
     }
   },
   analysis_result: {
+    leaf_count: Number,
+    maturity_stage: String,
     harvest_ready: Boolean,
     maturity_assessment: {
       type: String,
@@ -128,6 +134,7 @@ scanSchema.pre('save', async function() {
 // Compound indexes for efficient queries
 scanSchema.index({ user_id: 1, createdAt: -1 });
 scanSchema.index({ plant_id: 1, createdAt: -1 });
+scanSchema.index({ user_id: 1, scan_number: 1 }, { unique: true, sparse: true });
 scanSchema.index({ 'analysis_result.disease_detected': 1, createdAt: -1 });
 
 module.exports = mongoose.model('Scan', scanSchema);

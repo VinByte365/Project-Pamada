@@ -26,7 +26,9 @@ export default function PlantPreviewTile({ item, onPress }) {
           <View style={styles.row}>
             <StatusBadge status={item.status} />
             <View style={[styles.urgencyDot, { backgroundColor: item.urgencyColor }]} />
-            <Text style={[styles.urgencyText, { color: palette.text.secondary }]}>{item.urgency}</Text>
+            <Text numberOfLines={1} style={[styles.urgencyText, { color: palette.text.secondary }]}>
+              {item.urgency}
+            </Text>
           </View>
         </View>
       </View>
@@ -37,7 +39,7 @@ export default function PlantPreviewTile({ item, onPress }) {
 const styles = StyleSheet.create({
   card: {
     padding: spacing.sm,
-    minHeight: 126,
+    height: 126,
     marginBottom: spacing.sm,
   },
   mainRow: {
@@ -66,7 +68,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
   },
   meta: {
     ...typography.caption,
@@ -78,5 +80,6 @@ const styles = StyleSheet.create({
   },
   urgencyText: {
     ...typography.caption,
+    flexShrink: 1,
   },
 });

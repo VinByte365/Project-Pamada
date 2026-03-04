@@ -3,6 +3,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,7 +32,9 @@ export default function ChatbotScreen() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef(null);
+  const streamVersionRef = useRef(0);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -47,10 +50,37 @@ export default function ChatbotScreen() {
   }, []);
 
   const appendMessage = (message) => {
-    setMessages((prev) => [...prev, { id: `${Date.now()}-${Math.random()}`, ...message }]);
+    const id = `${Date.now()}-${Math.random()}`;
+    setMessages((prev) => [...prev, { id, ...message }]);
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     });
+    return id;
+  };
+
+  const streamAssistantMessage = async (text) => {
+    const streamId = ++streamVersionRef.current;
+    const messageId = appendMessage({ role: 'bot', text: '' });
+
+    for (let index = 1; index <= text.length; index += 1) {
+      if (streamVersionRef.current !== streamId) return;
+      const nextChunk = text.slice(0, index);
+      setMessages((prev) =>
+        prev.map((item) => (item.id === messageId ? { ...item, text: nextChunk } : item))
+      );
+      await new Promise((resolve) => setTimeout(resolve, 14));
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd({ animated: false });
+      });
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    streamVersionRef.current += 1;
+    setError('');
+    setMessages(initialMessages);
+    setTimeout(() => setRefreshing(false), 250);
   };
 
   const handleSend = async () => {
@@ -72,52 +102,62 @@ export default function ChatbotScreen() {
       });
 
       if (response?.success) {
-        appendMessage({
-          role: 'bot',
-          text: response.message || 'I am here to help with Aloe Vera questions.',
-        });
+        await streamAssistantMessage(
+          response.message || 'I am here to help with Aloe Vera questions.'
+        );
       } else {
         throw new Error(response?.error || 'Chatbot did not respond.');
       }
     } catch (err) {
       setError(err.message || 'Unable to reach chatbot service.');
-      appendMessage({
-        role: 'bot',
-        text: 'I am having trouble responding right now. Please try again.',
-      });
+      await streamAssistantMessage('I am having trouble responding right now. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top}
         style={styles.keyboard}
       >
-        <View style={styles.header}>
-          <Ionicons name="chatbubbles" size={22} color={colors.primary} />
-          <Text style={styles.headerTitle}>Pamada Chatbot</Text>
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: Math.max(spacing.lg, insets.top + spacing.sm),
+            },
+          ]}
+        >
+          <View style={styles.headerTopRow}>
+            <Ionicons name="chatbubbles" size={22} color={colors.primary} />
+            <Text style={styles.headerTitle}>Pamada Chatbot</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>Ask about Aloe Vera care, disease, and harvest timing.</Text>
         </View>
 
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.messages}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           showsVerticalScrollIndicator={false}
         >
           {messages.map((message) => (
-            <View
-              key={message.id}
-              style={[
-                styles.bubble,
-                message.role === 'user' ? styles.userBubble : styles.botBubble,
-              ]}
-            >
+            <View key={message.id} style={styles.messageBlock}>
+              <Text style={[styles.roleText, message.role === 'user' ? styles.userRole : styles.botRole]}>
+                {message.role === 'user' ? 'You' : 'Pamada AI'}
+              </Text>
+              <View
+                style={[
+                  styles.bubble,
+                  message.role === 'user' ? styles.userBubble : styles.botBubble,
+                ]}
+              >
               <Text
                 style={[
                   styles.bubbleText,
@@ -126,6 +166,7 @@ export default function ChatbotScreen() {
               >
                 {message.text}
               </Text>
+            </View>
             </View>
           ))}
           {loading ? (
@@ -182,23 +223,51 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    backgroundColor: colors.surface,
+    minHeight: 150,
+    paddingHorizontal: spacing.screenPadding,
+    paddingBottom: spacing.md,
+    justifyContent: 'flex-end',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    marginBottom: spacing.xs,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.md,
     gap: spacing.sm,
   },
   headerTitle: {
-    ...typography.title,
+    ...typography.headline,
+    fontWeight: '800',
     color: colors.text.primary,
+  },
+  headerSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginTop: spacing.xxs,
   },
   messages: {
     paddingHorizontal: spacing.screenPadding,
     paddingBottom: spacing.lg,
     gap: spacing.sm,
   },
+  messageBlock: {
+    maxWidth: '88%',
+  },
+  roleText: {
+    ...typography.caption,
+    marginBottom: spacing.xxs,
+  },
+  userRole: {
+    alignSelf: 'flex-end',
+    color: colors.text.secondary,
+  },
+  botRole: {
+    alignSelf: 'flex-start',
+    color: colors.primary,
+  },
   bubble: {
-    maxWidth: '80%',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.lg,

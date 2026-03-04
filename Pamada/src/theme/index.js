@@ -6,33 +6,33 @@ const buildPalette = (mode = 'light') => {
   return {
     mode,
     primary: {
-      start: isDark ? '#4E6953' : '#6B8A71',
-      end: isDark ? '#3F5743' : '#5E7A63',
-      solid: isDark ? '#4B644F' : '#5E7A63',
+      start: isDark ? '#4A8A63' : '#73B486',
+      end: isDark ? '#356A4A' : '#4D8E66',
+      solid: isDark ? '#4A8A63' : '#4D8E66',
       on: '#FFFFFF',
     },
     accent: {
-      action: '#5E7A63',
+      action: isDark ? '#72C882' : '#69B56E',
       on: '#FFFFFF',
     },
     background: {
-      base: isDark ? '#121A15' : '#F2F0E6',
-      secondary: isDark ? '#1A261F' : '#ECE9DE',
-      overlay: isDark ? 'rgba(4, 12, 10, 0.62)' : 'rgba(12, 32, 24, 0.18)',
+      base: isDark ? '#0F1A14' : '#EEF6EF',
+      secondary: isDark ? '#15231B' : '#E4F0E8',
+      overlay: isDark ? 'rgba(7, 16, 12, 0.7)' : 'rgba(26, 57, 40, 0.16)',
     },
     surface: {
-      light: isDark ? 'rgba(28, 41, 36, 0.9)' : '#FFFFFF',
-      soft: isDark ? 'rgba(24, 36, 32, 0.92)' : '#F4F7F6',
-      glass: isDark ? 'rgba(29, 44, 39, 0.62)' : 'rgba(255, 255, 255, 0.7)',
-      elevated: isDark ? 'rgba(35, 49, 44, 0.94)' : '#FFFFFF',
-      border: isDark ? 'rgba(149, 195, 174, 0.2)' : 'rgba(157, 188, 174, 0.35)',
-      borderStrong: isDark ? 'rgba(149, 195, 174, 0.34)' : 'rgba(115, 149, 133, 0.36)',
+      light: isDark ? 'rgba(26, 40, 33, 0.96)' : '#FAFFFB',
+      soft: isDark ? 'rgba(22, 34, 28, 0.95)' : '#F2FAF4',
+      glass: isDark ? 'rgba(34, 52, 43, 0.65)' : 'rgba(255, 255, 255, 0.78)',
+      elevated: isDark ? 'rgba(30, 45, 37, 0.98)' : '#FFFFFF',
+      border: isDark ? 'rgba(126, 182, 150, 0.24)' : 'rgba(124, 171, 141, 0.28)',
+      borderStrong: isDark ? 'rgba(138, 199, 164, 0.36)' : 'rgba(78, 128, 100, 0.34)',
     },
     text: {
-      primary: isDark ? '#ECF4F1' : '#1F2933',
-      secondary: isDark ? '#B0C0BA' : '#6B7280',
-      tertiary: isDark ? '#9BAAA4' : '#7B8794',
-      inverse: isDark ? '#0B1613' : '#FFFFFF',
+      primary: isDark ? '#ECF8F1' : '#1E2A22',
+      secondary: isDark ? '#B0C5B8' : '#5D6F63',
+      tertiary: isDark ? '#8EA497' : '#7A8B80',
+      inverse: '#FFFFFF',
     },
     status: {
       watering: '#60A5FA',
@@ -42,9 +42,9 @@ const buildPalette = (mode = 'light') => {
       info: '#38BDF8',
     },
     weather: {
-      skyTop: isDark ? '#1D3D4A' : '#8FD8FF',
-      skyBottom: isDark ? '#2A5565' : '#A9E8FF',
-      cloud: isDark ? 'rgba(235, 246, 255, 0.15)' : 'rgba(255, 255, 255, 0.75)',
+      skyTop: isDark ? '#2E6E4C' : '#7DC790',
+      skyBottom: isDark ? '#275B3F' : '#63A977',
+      cloud: isDark ? 'rgba(245, 255, 249, 0.16)' : 'rgba(255, 255, 255, 0.8)',
     },
   };
 };
@@ -59,7 +59,7 @@ export const spacing = {
   xxl: 48,
   xxxl: 56,
   screenPadding: moderateScale(16),
-  sectionGap: 24,
+  sectionGap: 20,
 };
 
 export const radius = {
@@ -69,8 +69,8 @@ export const radius = {
   lg: 20,
   xl: 24,
   card: 20,
-  button: 16,
-  floating: 24,
+  button: 18,
+  floating: 26,
   pill: 999,
   xxl: 28,
 };
@@ -103,7 +103,7 @@ export const typography = {
     fontWeight: '700',
   },
   body: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '400',
   },
   bodyMedium: {
@@ -116,7 +116,7 @@ export const typography = {
   },
   caption: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     letterSpacing: 0.15,
   },
 };
@@ -130,21 +130,21 @@ export const motion = {
 
 export const shadows = {
   surface: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
+    shadowColor: '#274935',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
     elevation: 3,
   },
   floating: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 30,
+    shadowColor: '#274935',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.12,
+    shadowRadius: 26,
     elevation: 8,
   },
   modal: {
-    shadowColor: '#000000',
+    shadowColor: '#213B2B',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.15,
     shadowRadius: 60,
@@ -182,19 +182,19 @@ const legacyPalette = lightTheme;
 
 export const colors = {
   primary: legacyPalette.primary.solid,
-  primaryDark: '#2A9D73',
-  primaryLight: '#DFF8E8',
+  primaryDark: '#356A4A',
+  primaryLight: '#DDF2E3',
   accent: legacyPalette.accent.action,
-  forest: '#2A9D73',
-  olive: '#5DA57D',
-  wheat: '#EAF7F3',
-  soil: '#6B7280',
-  mist: '#F4F7F6',
+  forest: '#4D8E66',
+  olive: '#73B486',
+  wheat: '#EEF6EF',
+  soil: '#5D6F63',
+  mist: '#F2FAF4',
   glass: legacyPalette.surface.glass,
   overlay: legacyPalette.background.overlay,
   gradientTop: legacyPalette.background.base,
   gradientMid: legacyPalette.background.secondary,
-  gradientBottom: '#DDF1EA',
+  gradientBottom: '#D9EEDD',
   success: legacyPalette.status.success,
   successDark: '#15803D',
   warning: legacyPalette.status.warning,

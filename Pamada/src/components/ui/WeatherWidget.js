@@ -45,6 +45,8 @@ export default function WeatherWidget() {
   const [weather, setWeather] = useState({
     temperature: '--',
     humidity: '--',
+    high: '--',
+    low: '--',
     condition: 'Fetching weather...',
     code: 2,
   });
@@ -78,11 +80,13 @@ export default function WeatherWidget() {
 
         const url =
           `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
-          '&current=temperature_2m,relative_humidity_2m,weather_code&timezone=auto';
+          '&current=temperature_2m,relative_humidity_2m,weather_code' +
+          '&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1';
 
         const response = await fetch(url);
         const data = await response.json();
         const current = data?.current || {};
+        const daily = data?.daily || {};
         const code = Number(current.weather_code ?? 2);
         const label = weatherLabelByCode[code] || 'Weather';
 
@@ -90,6 +94,8 @@ export default function WeatherWidget() {
           setWeather({
             temperature: Number.isFinite(current.temperature_2m) ? `${Math.round(current.temperature_2m)} C` : '--',
             humidity: Number.isFinite(current.relative_humidity_2m) ? `${Math.round(current.relative_humidity_2m)}%` : '--',
+            high: Number.isFinite(daily?.temperature_2m_max?.[0]) ? `${Math.round(daily.temperature_2m_max[0])} C` : '--',
+            low: Number.isFinite(daily?.temperature_2m_min?.[0]) ? `${Math.round(daily.temperature_2m_min[0])} C` : '--',
             condition: label,
             code,
           });
@@ -127,20 +133,29 @@ export default function WeatherWidget() {
         end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
-        <Animated.View
-          style={[
-            styles.cloud,
-            { backgroundColor: palette.weather.cloud, transform: [{ translateX }] },
-          ]}
-        />
+        <Animated.View style={[styles.cloud, { backgroundColor: palette.weather.cloud, transform: [{ translateX }] }]} />
         <View style={styles.topRow}>
           <View>
+            <Text style={[styles.kicker, { color: 'rgba(255,255,255,0.92)' }]}>Today Forecast</Text>
             <Text style={[styles.temp, { color: palette.text.inverse }]}>{weather.temperature}</Text>
             <Text style={[styles.condition, { color: palette.text.inverse }]}>{weather.condition}</Text>
           </View>
           <Ionicons name={weatherIconByCode(weather.code)} size={30} color={palette.accent.action} />
         </View>
-        <Text style={[styles.meta, { color: 'rgba(255,255,255,0.86)' }]}>Humidity {weather.humidity}</Text>
+        <View style={styles.statsRow}>
+          <View style={[styles.statPill, { borderColor: 'rgba(255,255,255,0.26)' }]}>
+            <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.85)' }]}>High</Text>
+            <Text style={[styles.statValue, { color: palette.text.inverse }]}>{weather.high}</Text>
+          </View>
+          <View style={[styles.statPill, { borderColor: 'rgba(255,255,255,0.26)' }]}>
+            <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.85)' }]}>Low</Text>
+            <Text style={[styles.statValue, { color: palette.text.inverse }]}>{weather.low}</Text>
+          </View>
+          <View style={[styles.statPill, { borderColor: 'rgba(255,255,255,0.26)' }]}>
+            <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.85)' }]}>Humidity</Text>
+            <Text style={[styles.statValue, { color: palette.text.inverse }]}>{weather.humidity}</Text>
+          </View>
+        </View>
       </LinearGradient>
     </ElevatedCard>
   );
@@ -153,7 +168,7 @@ const styles = StyleSheet.create({
   gradient: {
     borderRadius: radius.card,
     padding: spacing.md,
-    minHeight: 126,
+    minHeight: 152,
   },
   cloud: {
     position: 'absolute',
@@ -171,12 +186,33 @@ const styles = StyleSheet.create({
   temp: {
     ...typography.headline,
   },
+  kicker: {
+    ...typography.caption,
+    marginBottom: spacing.xxs,
+  },
   condition: {
     ...typography.bodyMedium,
     marginTop: spacing.xxs,
   },
-  meta: {
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  statPill: {
+    flex: 1,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+  },
+  statLabel: {
     ...typography.caption,
-    marginTop: spacing.lg,
+  },
+  statValue: {
+    ...typography.bodyBold,
+    marginTop: 1,
   },
 });

@@ -8,19 +8,25 @@ export default function RootLayout({ children }) {
 
   return (
     <LinearGradient
-      colors={[palette.background.base, palette.background.secondary, palette.surface.soft]}
+      colors={[palette.background.base, '#E9F3EC', palette.background.secondary]}
       style={styles.container}
     >
       <View
         style={[
           styles.blobTop,
-          { backgroundColor: isDark ? 'rgba(110,220,140,0.14)' : 'rgba(110,220,140,0.2)' },
+          { backgroundColor: isDark ? 'rgba(117, 196, 139, 0.15)' : 'rgba(157, 220, 173, 0.32)' },
         ]}
       />
       <View
         style={[
           styles.blobBottom,
-          { backgroundColor: isDark ? 'rgba(42,157,115,0.2)' : 'rgba(62,207,142,0.18)' },
+          { backgroundColor: isDark ? 'rgba(63, 132, 87, 0.22)' : 'rgba(133, 195, 149, 0.24)' },
+        ]}
+      />
+      <View
+        style={[
+          styles.blobCenter,
+          { backgroundColor: isDark ? 'rgba(129, 191, 147, 0.08)' : 'rgba(195, 234, 207, 0.35)' },
         ]}
       />
       {children}
@@ -47,5 +53,13 @@ const styles = StyleSheet.create({
     borderRadius: 160,
     bottom: -150,
     left: -130,
+  },
+  blobCenter: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    top: '34%',
+    right: -90,
   },
 });

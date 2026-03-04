@@ -11,7 +11,7 @@ export default function ElevatedCard({ children, style, onPress, gradient = fals
     <LinearGradient
       colors={[palette.surface.light, palette.surface.soft]}
       start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+      end={{ x: 1, y: 0.8 }}
       style={styles.gradientFill}
     >
       {children}
@@ -24,7 +24,7 @@ export default function ElevatedCard({ children, style, onPress, gradient = fals
     styles.base,
     {
       backgroundColor: gradient ? 'transparent' : palette.surface.elevated,
-      borderColor: palette.surface.border,
+      borderColor: palette.surface.borderStrong,
     },
     floating ? shadows.floating : shadows.surface,
     style,

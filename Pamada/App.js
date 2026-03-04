@@ -7,6 +7,8 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { AppDataProvider } from './src/contexts/AppDataContext';
 import { RealtimeProvider } from './src/contexts/RealtimeContext';
+import { CommunityPostUploadProvider } from './src/contexts/CommunityPostUploadContext';
+import { SnackbarProvider } from './src/contexts/SnackbarContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import RootLayout from './src/layout/RootLayout';
 import { getTheme } from './src/theme';
@@ -30,29 +32,33 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <RealtimeProvider>
-          <AppDataProvider>
-            <NavigationContainer
-              theme={{
-                dark: mode === 'dark',
-                colors: {
-                  primary: palette.primary.solid,
-                  background: palette.background.base,
-                  card: palette.surface.light,
-                  text: palette.text.primary,
-                  border: palette.surface.border,
-                  notification: palette.status.warning,
-                },
-              }}
-            >
-              <RootLayout>
-                <StatusBar
-                  style={mode === 'dark' ? 'light' : 'dark'}
-                  translucent={false}
-                />
-                <RootNavigator />
-              </RootLayout>
-            </NavigationContainer>
-          </AppDataProvider>
+          <CommunityPostUploadProvider>
+            <AppDataProvider>
+              <SnackbarProvider>
+                <NavigationContainer
+                  theme={{
+                    dark: mode === 'dark',
+                    colors: {
+                      primary: palette.primary.solid,
+                      background: palette.background.base,
+                      card: palette.surface.light,
+                      text: palette.text.primary,
+                      border: palette.surface.border,
+                      notification: palette.status.warning,
+                    },
+                  }}
+                >
+                  <RootLayout>
+                    <StatusBar
+                      style={mode === 'dark' ? 'light' : 'dark'}
+                      translucent={false}
+                    />
+                    <RootNavigator />
+                  </RootLayout>
+                </NavigationContainer>
+              </SnackbarProvider>
+            </AppDataProvider>
+          </CommunityPostUploadProvider>
         </RealtimeProvider>
       </AuthProvider>
     </SafeAreaProvider>

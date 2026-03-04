@@ -26,6 +26,15 @@ const formatTime = (value) => {
   });
 };
 
+const formatDate = (value) => {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 export default function ConversationScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { palette } = useAppTheme();
@@ -174,8 +183,21 @@ export default function ConversationScreen({ navigation, route }) {
                       },
                     ]}
                   >
-                    {formatTime(item.created_at)}
+                    {formatDate(item.created_at)} - {formatTime(item.created_at)}
                   </Text>
+                  {mine ? (
+                    <Text
+                      style={[
+                        styles.seenState,
+                        {
+                          color: item.read_status ? `${palette.primary.on}CC` : `${palette.primary.on}99`,
+                          textAlign: 'right',
+                        },
+                      ]}
+                    >
+                      {item.read_status ? 'Seen' : 'Sent'}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             );
@@ -289,6 +311,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     marginTop: 4,
     fontSize: 11,
+  },
+  seenState: {
+    ...typography.caption,
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '700',
   },
   emptyWrap: {
     paddingVertical: spacing.xl,

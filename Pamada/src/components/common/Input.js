@@ -29,7 +29,7 @@ export default function Input({
 
   const borderColor = useMemo(() => {
     if (!editable) return palette.surface.border;
-    if (focused) return palette.primary.solid;
+    if (focused) return palette.primary.start;
     return palette.surface.borderStrong;
   }, [editable, focused, palette]);
 
@@ -56,7 +56,7 @@ export default function Input({
           styles.inputContainer,
           {
             borderColor,
-            backgroundColor: focused ? palette.surface.light : palette.surface.glass,
+            backgroundColor: focused ? palette.surface.light : palette.surface.soft,
           },
           focused && styles.inputFocused,
           !editable && styles.inputDisabled,
@@ -110,9 +110,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.button,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    minHeight: 50,
   },
   inputFocused: {
     transform: [{ scale: 1 }],

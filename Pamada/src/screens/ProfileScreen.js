@@ -1,23 +1,28 @@
-import React, { useMemo } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppData } from '../contexts/AppDataContext';
 import AnimatedInView from '../components/common/AnimatedInView';
 import ElevatedCard from '../components/ui/ElevatedCard';
-import ProgressRing from '../components/ui/ProgressRing';
 import StatusBadge from '../components/ui/StatusBadge';
 import useAppTheme from '../theme/useAppTheme';
 import { radius, spacing, typography } from '../theme';
+import { buildProfileMetrics, getDiseaseDistribution } from '../utils/analyticsHelpers';
+import { buildProfileSummaryFields, PROFILE_SETTINGS_FIELDS } from '../utils/profileFields';
+
+const DEFAULT_PROFILE_COVER = require('../../assets/aloe-vera.png');
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const { palette } = useAppTheme();
   const { user, logout } = useAuth();
-  const { analytics, scans } = useAppData();
+  const { analytics, scans, refreshAll } = useAppData();
+  const [refreshing, setRefreshing] = useState(false);
+  const { width } = useWindowDimensions();
+  const isWide = width >= 400;
 
   const joinedSource = user?.createdAt || user?.created_at || user?.created_at_utc;
   const joinedDate = joinedSource
@@ -32,6 +37,8 @@ export default function ProfileScreen() {
     joined: joinedDate,
   };
   const profileImageUrl = user?.profile_image?.url || '';
+  const coverImageUrl = user?.cover_image?.url || user?.cover_image_url || '';
+  const coverImageSource = coverImageUrl ? { uri: coverImageUrl } : DEFAULT_PROFILE_COVER;
   const initials = useMemo(() => {
     const name = (farmInfo.name || '').trim();
     if (!name) return 'P';
@@ -41,79 +48,92 @@ export default function ProfileScreen() {
     return `${first}${second}`.toUpperCase() || 'P';
   }, [farmInfo.name]);
 
-  const settings = [
-    { icon: 'person-circle-outline', label: 'Account Settings', route: 'AccountSettings' },
-    { icon: 'notifications-outline', label: 'Notifications', route: 'NotificationsSettings' },
-    { icon: 'shield-checkmark-outline', label: 'Privacy & Security', route: 'PrivacySecurity' },
-    { icon: 'help-circle-outline', label: 'Help & Support', route: 'HelpSupport' },
-    { icon: 'information-circle-outline', label: 'About Pamada', route: 'AboutPamada' },
-  ];
+  const settings = PROFILE_SETTINGS_FIELDS;
+  const summaryFields = buildProfileSummaryFields(farmInfo, analytics);
+  const metrics = buildProfileMetrics(analytics, palette);
+  const diseases = getDiseaseDistribution(analytics, [
+    { name: 'No active disease signals', percentage: 0, color: palette.status.success },
+  ]);
 
-  const metrics = [
-    {
-      key: 'harvest',
-      label: 'Harvest Rate',
-      value: Number(String(analytics.harvestRate || '0').replace('%', '')),
-      icon: 'leaf-outline',
-      tint: palette.accent.action,
-    },
-    {
-      key: 'disease',
-      label: 'Disease Rate',
-      value: Number(String(analytics.diseaseRate || '0').replace('%', '')),
-      icon: 'warning-outline',
-      tint: palette.status.warning,
-    },
-    {
-      key: 'maturity',
-      label: 'Avg Maturity',
-      value: Number(String(analytics.avgMaturity || '0').replace('%', '')),
-      icon: 'analytics-outline',
-      tint: palette.status.watering,
-    },
-  ];
-
-  const diseases = analytics.diseaseDistribution?.length
-    ? analytics.diseaseDistribution
-    : [{ name: 'No active disease signals', percentage: 0, color: palette.status.success }];
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshAll();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshAll]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <AnimatedInView>
-          <LinearGradient
-            colors={[palette.primary.start, palette.primary.end]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.hero}
-          >
-            <TouchableOpacity onPress={() => navigation.navigate('AccountSettings')} style={styles.avatar}>
-              {profileImageUrl ? (
-                <Image source={{ uri: profileImageUrl }} style={styles.avatarImage} />
-              ) : (
-                <Text style={styles.avatarInitials}>{initials}</Text>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.heroName}>{farmInfo.name}</Text>
-            <Text style={styles.heroSub}>{farmInfo.location}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AccountSettings')}>
-              <Text style={styles.editPhotoText}>Edit photo in Account Settings</Text>
-            </TouchableOpacity>
-            <View style={styles.heroBadges}>
-              <StatusBadge status="healthy" label={`${farmInfo.plants} Plants`} />
-              <StatusBadge status="ready" label={`Joined ${farmInfo.joined}`} />
+          <View style={[styles.heroWrap, { borderColor: palette.surface.border, backgroundColor: palette.surface.light }]}>
+            <Image source={coverImageSource} style={styles.heroCoverImage} resizeMode="cover" />
+            <View style={[styles.coverDivider, { backgroundColor: palette.surface.border }]} />
+            <View style={styles.hero}>
+              <View style={[styles.avatarFrame, { borderColor: palette.surface.light }]}>
+                <TouchableOpacity onPress={() => navigation.navigate('AccountSettings')} style={styles.avatar}>
+                  {profileImageUrl ? (
+                    <Image source={{ uri: profileImageUrl }} style={styles.avatarImage} />
+                  ) : (
+                    <Text style={styles.avatarInitials}>{initials}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.heroName, { color: palette.text.primary }]}>{farmInfo.name}</Text>
+              <Text style={[styles.heroSub, { color: palette.text.secondary }]}>{farmInfo.location}</Text>
+
+              <View style={styles.heroBadges}>
+                <StatusBadge status="healthy" label={`${farmInfo.plants} Plants`} />
+                <StatusBadge status="ready" label={`Joined ${farmInfo.joined}`} />
+              </View>
+
+              <View style={styles.quickActions}>
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}
+                  onPress={() => navigation.navigate('AccountSettings')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit profile"
+                >
+                  <Ionicons name="create-outline" size={16} color={palette.text.primary} />
+                  <Text style={[styles.quickActionText, { color: palette.text.primary }]}>Edit profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}
+                  onPress={() => navigation.navigate('AboutPamada')}
+                  accessibilityRole="button"
+                  accessibilityLabel="About Pamada"
+                >
+                  <Ionicons name="information-circle-outline" size={16} color={palette.text.primary} />
+                  <Text style={[styles.quickActionText, { color: palette.text.primary }]}>About</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity onPress={() => navigation.navigate('AccountSettings')}>
+                <Text style={[styles.editPhotoText, { color: palette.text.tertiary }]}>Edit photo and cover in Account Settings</Text>
+              </TouchableOpacity>
             </View>
-          </LinearGradient>
+          </View>
         </AnimatedInView>
 
         <AnimatedInView delay={70}>
           <ElevatedCard style={styles.summaryCard}>
             <Text style={[styles.cardTitle, { color: palette.text.primary }]}>Farm Overview</Text>
             <View style={styles.summaryRows}>
-              <SummaryRow icon="resize-outline" label="Farm Size" value={farmInfo.size} />
-              <SummaryRow icon="leaf-outline" label="Total Plants" value={`${farmInfo.plants}`} />
-              <SummaryRow icon="calendar-outline" label="Member Since" value={farmInfo.joined} />
-              <SummaryRow icon="analytics-outline" label="AI Accuracy" value={analytics.avgMaturity || '0%'} accent />
+              {summaryFields.map((field) => (
+                <SummaryRow
+                  key={field.label}
+                  icon={field.icon}
+                  label={field.label}
+                  value={field.value}
+                  accent={field.accent}
+                />
+              ))}
             </View>
           </ElevatedCard>
         </AnimatedInView>
@@ -121,12 +141,34 @@ export default function ProfileScreen() {
         <AnimatedInView delay={140}>
           <ElevatedCard style={styles.analyticsCard}>
             <Text style={[styles.cardTitle, { color: palette.text.primary }]}>Your Analytics</Text>
-            <View style={styles.ringsRow}>
+            <View style={styles.metricsGrid}>
               {metrics.map((metric) => (
-                <View key={metric.key} style={styles.ringItem}>
-                  <ProgressRing progress={metric.value} tint={metric.tint} label={metric.label} />
-                  <View style={styles.metricIconWrap}>
-                    <Ionicons name={metric.icon} size={14} color={metric.tint} />
+                <View
+                  key={metric.key}
+                  style={[
+                    styles.metricTile,
+                    { width: isWide ? '48.5%' : '100%' },
+                    {
+                      borderColor: palette.surface.border,
+                      backgroundColor: palette.surface.light,
+                    },
+                  ]}
+                >
+                  <View style={styles.metricTileHead}>
+                    <Ionicons name={metric.icon} size={15} color={metric.tint} />
+                    <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>{metric.label}</Text>
+                  </View>
+                  <Text style={[styles.metricValue, { color: palette.text.primary }]}>{Math.round(metric.value)}%</Text>
+                  <View style={[styles.metricTrack, { backgroundColor: palette.surface.soft }]}>
+                    <View
+                      style={[
+                        styles.metricFill,
+                        {
+                          width: `${metric.value}%`,
+                          backgroundColor: metric.tint,
+                        },
+                      ]}
+                    />
                   </View>
                 </View>
               ))}
@@ -221,20 +263,41 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
     gap: spacing.md,
   },
-  hero: {
+  heroWrap: {
+    borderWidth: 1,
     borderRadius: radius.floating,
-    padding: spacing.lg,
+    overflow: 'hidden',
+  },
+  heroCoverImage: {
+    width: '100%',
+    height: 94,
+  },
+  coverDivider: {
+    height: 2,
+    width: '100%',
+  },
+  hero: {
+    marginTop: -36,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
     alignItems: 'center',
   },
   avatar: {
     width: 86,
     height: 86,
     borderRadius: 43,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
     overflow: 'hidden',
+  },
+  avatarFrame: {
+    borderWidth: 3,
+    borderRadius: 48,
+    padding: 1,
+    marginBottom: spacing.xs,
   },
   avatarImage: {
     width: '100%',
@@ -247,16 +310,15 @@ const styles = StyleSheet.create({
   },
   heroName: {
     ...typography.titleLarge,
-    color: '#FFFFFF',
+    textAlign: 'center',
   },
   heroSub: {
     ...typography.caption,
-    color: 'rgba(255,255,255,0.9)',
     marginTop: spacing.xxs,
+    textAlign: 'center',
   },
   editPhotoText: {
     ...typography.caption,
-    color: 'rgba(255,255,255,0.95)',
     textDecorationLine: 'underline',
     marginTop: spacing.xs,
   },
@@ -266,6 +328,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     marginTop: spacing.md,
+  },
+  quickActions: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  quickActionBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  quickActionText: {
+    ...typography.caption,
+    fontWeight: '700',
   },
   summaryCard: {
     padding: spacing.md,
@@ -303,19 +385,41 @@ const styles = StyleSheet.create({
   analyticsCard: {
     padding: spacing.md,
   },
-  ringsRow: {
+  metricsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: spacing.xs,
+    marginBottom: spacing.xs,
   },
-  ringItem: {
+  metricTile: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  metricTileHead: {
+    flexDirection: 'row',
     alignItems: 'center',
-    position: 'relative',
+    gap: spacing.xs,
   },
-  metricIconWrap: {
-    position: 'absolute',
-    top: -4,
-    right: 4,
+  metricLabel: {
+    ...typography.caption,
+    flex: 1,
+  },
+  metricValue: {
+    ...typography.bodyBold,
+    marginTop: spacing.xs,
+  },
+  metricTrack: {
+    height: 6,
+    borderRadius: 99,
+    overflow: 'hidden',
+    marginTop: spacing.xs,
+  },
+  metricFill: {
+    height: '100%',
+    borderRadius: 99,
   },
   distributionList: {
     gap: spacing.sm,

@@ -5,13 +5,16 @@ const {
   getAccountSettings,
   updateAccountSettings,
   updateAccountAvatar,
+  updateAccountCover,
   getNotificationSettings,
   updateNotificationSettings,
   getPrivacySettings,
   updatePrivacySettings,
   getHelpSupport,
   createSupportTicket,
-  getAbout
+  getAbout,
+  getLuzonGardens,
+  getHomeHeroMedia,
 } = require('../controllers/settingsController');
 
 const router = express.Router();
@@ -22,6 +25,7 @@ router.route('/account')
   .get(getAccountSettings)
   .put(updateAccountSettings);
 router.put('/account/avatar', upload.single('avatar'), updateAccountAvatar);
+router.put('/account/cover', upload.single('cover'), updateAccountCover);
 
 router.route('/notifications')
   .get(getNotificationSettings)
@@ -33,8 +37,10 @@ router.route('/privacy')
 
 router.route('/help')
   .get(getHelpSupport)
-  .post(createSupportTicket);
+  .post(upload.single('image'), createSupportTicket);
 
 router.get('/about', getAbout);
+router.get('/luzon-gardens', getLuzonGardens);
+router.get('/home-hero-media', getHomeHeroMedia);
 
 module.exports = router;

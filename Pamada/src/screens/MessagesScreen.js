@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
+  RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -13,6 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
+import {
+  EnhancedInput,
+  ScreenHeader,
+} from '../components/common';
 import { radius, spacing, typography } from '../theme';
 import useAppTheme from '../theme/useAppTheme';
 
@@ -21,6 +26,9 @@ export default function MessagesScreen({ navigation, route }) {
   const { token, user } = useAuth();
   const [threads, setThreads] = useState([]);
   const [query, setQuery] = useState('');
+  const [userResults, setUserResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const myId = user?.id || user?._id;
   const initialUserId = route.params?.userId;
@@ -53,99 +61,210 @@ export default function MessagesScreen({ navigation, route }) {
     });
   }, [initialUserId, initialUserName, myId, navigation]);
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredThreads = useMemo(() => {
-    if (!normalizedQuery) return threads;
-    return threads.filter((item) => {
-      const name = String(item.user?.full_name || '').toLowerCase();
-      const preview = String(item.last_message || '').toLowerCase();
-      return name.includes(normalizedQuery) || preview.includes(normalizedQuery);
-    });
-  }, [threads, normalizedQuery]);
+  const normalizedQuery = query.trim();
 
-  const suggestions = useMemo(() => {
-    if (!normalizedQuery) return [];
-    return threads
-      .filter((item) => String(item.user?.full_name || '').toLowerCase().includes(normalizedQuery))
-      .slice(0, 5);
-  }, [threads, normalizedQuery]);
+  useEffect(() => {
+    let active = true;
+    const searchUsers = async () => {
+      if (!normalizedQuery) {
+        setUserResults([]);
+        setSearchingUsers(false);
+        return;
+      }
+
+      setSearchingUsers(true);
+      try {
+        const response = await apiRequest(
+          `/api/v1/community/messages/users?q=${encodeURIComponent(normalizedQuery)}`,
+          {
+            method: 'GET',
+            token,
+          }
+        );
+        if (!active) return;
+        setUserResults(response?.data?.users || []);
+      } catch (error) {
+        if (!active) return;
+        setUserResults([]);
+      } finally {
+        if (active) setSearchingUsers(false);
+      }
+    };
+
+    const debounce = setTimeout(searchUsers, 250);
+    return () => {
+      active = false;
+      clearTimeout(debounce);
+    };
+  }, [normalizedQuery, token]);
+
+  const showingUserSearch = normalizedQuery.length > 0;
+  const listData = useMemo(
+    () => (showingUserSearch ? userResults : threads),
+    [showingUserSearch, userResults, threads]
+  );
+
+  const isOnlineUser = (thread) => {
+    const timestamp = new Date(thread?.last_message_at || 0).getTime();
+    if (!timestamp) return false;
+    const minutesSinceLastMessage = (Date.now() - timestamp) / (1000 * 60);
+    return minutesSinceLastMessage <= 5;
+  };
+
+  const formatThreadDate = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    if (sameDay) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadThreads();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={[styles.title, { color: palette.text.primary }]}>Messages</Text>
+        <ScreenHeader
+          title="Chats"
+          subtitle="Recent conversations"
+          onBack={() => navigation.goBack()}
+          rightIcon="create-outline"
+          onRightPress={() => {}}
+          style={styles.header}
+        />
 
-        <View style={[styles.searchWrap, { borderColor: palette.surface.border, backgroundColor: palette.surface.light }]}>
-          <Ionicons name="search-outline" size={18} color={palette.text.tertiary} />
-          <TextInput
+        <View style={[styles.searchWrap, { backgroundColor: palette.surface.soft, borderColor: palette.surface.border }]}>
+          <EnhancedInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search conversations"
-            placeholderTextColor={palette.text.tertiary}
-            style={[styles.searchInput, { color: palette.text.primary }]}
+            placeholder="Search"
+            leftIcon="search-outline"
+            rightIcon={searchingUsers ? 'sync-outline' : undefined}
+            onRightIconPress={() => {}}
           />
         </View>
 
-        {suggestions.length > 0 ? (
-          <View style={[styles.suggestionWrap, { borderColor: palette.surface.border, backgroundColor: palette.surface.light }]}>
-            {suggestions.map((item) => (
-              <TouchableOpacity
-                key={`suggest-${item.user.id}`}
-                style={styles.suggestionItem}
-                onPress={() => {
-                  setQuery(item.user.full_name);
-                  navigation.navigate('Conversation', {
-                    userId: item.user.id,
-                    userName: item.user.full_name,
-                  });
-                }}
-              >
-                <Text style={[styles.suggestionText, { color: palette.text.primary }]}>{item.user.full_name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
+        <Text style={[styles.sectionTitle, { color: palette.text.tertiary }]}>
+          {showingUserSearch ? 'People' : 'Messages'}
+        </Text>
 
         <FlatList
-          data={filteredThreads}
-          keyExtractor={(item) => String(item.user.id)}
+          data={listData}
+          keyExtractor={(item) => String(showingUserSearch ? item.id : item.user.id)}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.threadItem, { borderColor: palette.surface.border, backgroundColor: palette.surface.light }]}
-              onPress={() =>
-                navigation.navigate('Conversation', {
-                  userId: item.user.id,
-                  userName: item.user.full_name,
-                })
-              }
-            >
-              {item.user.profile_image_url ? (
-                <Image source={{ uri: item.user.profile_image_url }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, { backgroundColor: `${palette.primary.solid}22` }]}>
-                  <Text style={[styles.avatarInitial, { color: palette.primary.solid }]}>
-                    {item.user.full_name?.slice(0, 1)?.toUpperCase() || 'U'}
-                  </Text>
+          renderItem={({ item }) => {
+            const targetUser = showingUserSearch ? item : item.user;
+            const subtitle = showingUserSearch
+              ? 'Tap to start conversation'
+              : item.last_message || 'No message preview';
+            const timeLabel = !showingUserSearch && item.last_message_at
+              ? formatThreadDate(item.last_message_at)
+              : '';
+            const unreadCount = !showingUserSearch ? Number(item.unread_count || 0) : 0;
+            const hasUnread = unreadCount > 0;
+            const lastMessageFromMe = !showingUserSearch && String(item.last_message_sender_id) === String(myId);
+            const lastMessageSeen = Boolean(item.last_message_read_status);
+            const statusLabel = showingUserSearch
+              ? ''
+              : hasUnread
+                ? `${unreadCount} unread`
+                : lastMessageFromMe
+                  ? (lastMessageSeen ? 'Seen' : 'Sent')
+                  : 'Read';
+
+            return (
+              <TouchableOpacity
+                style={styles.threadRow}
+                onPress={() =>
+                  navigation.navigate('Conversation', {
+                    userId: targetUser.id,
+                    userName: targetUser.full_name,
+                  })
+                }
+                activeOpacity={0.78}
+              >
+                <View style={styles.avatarWrap}>
+                  {targetUser.profile_image_url ? (
+                    <Image source={{ uri: targetUser.profile_image_url }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatar, { backgroundColor: `${palette.primary.solid}20` }]}>
+                      <Text style={[styles.avatarText, { color: palette.primary.solid }]}>
+                        {targetUser.full_name?.slice(0, 1)?.toUpperCase() || 'U'}
+                      </Text>
+                    </View>
+                  )}
+                  {!showingUserSearch && isOnlineUser(item) ? (
+                    <View
+                      style={[
+                        styles.onlineDot,
+                        {
+                          borderColor: palette.background.base,
+                          backgroundColor: palette.status.success,
+                        },
+                      ]}
+                    />
+                  ) : null}
                 </View>
-              )}
-              <View style={styles.threadBody}>
-                <Text style={[styles.threadName, { color: palette.text.primary }]} numberOfLines={1}>
-                  {item.user.full_name}
-                </Text>
-                <Text style={[styles.preview, { color: palette.text.secondary }]} numberOfLines={1}>
-                  {item.last_message}
-                </Text>
-              </View>
-              <Text style={[styles.time, { color: palette.text.tertiary }]}>
-                {new Date(item.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </TouchableOpacity>
-          )}
+
+                <View style={styles.threadBody}>
+                  <View style={styles.threadHead}>
+                    <Text style={[styles.threadName, { color: palette.text.primary }]} numberOfLines={1}>
+                      {targetUser.full_name}
+                    </Text>
+                    {timeLabel ? (
+                      <Text style={[styles.time, { color: hasUnread ? palette.primary.solid : palette.text.tertiary }]}>
+                        {timeLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.previewRow}>
+                    <Text
+                      style={[
+                        styles.preview,
+                        { color: hasUnread ? palette.text.primary : palette.text.secondary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {subtitle}
+                    </Text>
+                    {statusLabel ? (
+                      <Text
+                        style={[
+                          styles.statusText,
+                          {
+                            color: hasUnread ? palette.primary.solid : palette.text.tertiary,
+                          },
+                        ]}
+                      >
+                        {statusLabel}
+                      </Text>
+                    ) : null}
+                    {hasUnread ? <View style={[styles.unreadDot, { backgroundColor: palette.primary.solid }]} /> : null}
+                  </View>
+                </View>
+
+                <Ionicons name="chevron-forward" size={18} color={palette.text.tertiary} />
+              </TouchableOpacity>
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
-              <Text style={[styles.emptyText, { color: palette.text.secondary }]}>No conversations yet.</Text>
+              <Text style={[styles.emptyText, { color: palette.text.secondary }]}>
+                {showingUserSearch ? 'No users found.' : 'No conversations yet.'}
+              </Text>
             </View>
           }
         />
@@ -162,77 +281,96 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.screenPadding,
-    paddingTop: spacing.xs,
+    paddingTop: spacing.sm,
   },
-  title: {
-    ...typography.headline,
+  header: {
+    marginBottom: spacing.sm,
+    paddingHorizontal: 0,
   },
   searchWrap: {
-    marginTop: spacing.sm,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+    borderWidth: 0,
+    borderRadius: radius.pill,
+    marginBottom: spacing.sm,
   },
-  searchInput: {
-    flex: 1,
-    ...typography.body,
-  },
-  suggestionWrap: {
-    marginTop: spacing.xs,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: 4,
-  },
-  suggestionItem: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  suggestionText: {
-    ...typography.body,
+  sectionTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+    marginLeft: 4,
   },
   listContent: {
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.xxl,
-    gap: spacing.xs,
+    gap: spacing.xxs,
   },
-  threadItem: {
+  threadRow: {
     minHeight: 72,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatarWrap: {
+    position: 'relative',
   },
-  avatarInitial: {
-    ...typography.caption,
-    fontWeight: '700',
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  avatarText: {
+    ...typography.bodyBold,
+    textAlign: 'center',
+    lineHeight: 52,
+  },
+  onlineDot: {
+    position: 'absolute',
+    right: 1,
+    bottom: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
   },
   threadBody: {
     flex: 1,
   },
+  threadHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
   threadName: {
     ...typography.bodyBold,
+    flex: 1,
+  },
+  previewRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   preview: {
+    ...typography.body,
+    flex: 1,
+    fontSize: 14,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
     ...typography.caption,
-    marginTop: 2,
+    fontWeight: '700',
   },
   time: {
     ...typography.caption,
+    fontWeight: '600',
   },
   emptyWrap: {
     paddingVertical: spacing.xl,

@@ -4,6 +4,38 @@ const asyncHandler = require('../utils/controllerWrapper');
 const { uploadImage, deleteImage } = require('../services/imageService');
 
 const SETTINGS_VERSION = '1.0.0';
+const ISSUE_CATEGORIES = [
+  'detection_error',
+  'maturity_misclassification',
+  'disease_misclassification',
+  'app_crash',
+  'performance_issue',
+  'other',
+];
+
+const ISSUE_CATEGORY_LABELS = {
+  detection_error: 'Detection Error',
+  maturity_misclassification: 'Maturity Misclassification',
+  disease_misclassification: 'Disease Misclassification',
+  app_crash: 'App Crash',
+  performance_issue: 'Performance Issue',
+  other: 'Other',
+  general: 'General',
+  technical: 'Technical',
+  billing: 'Billing',
+  feedback: 'Feedback',
+};
+
+const LUZON_GARDENS = [
+  { id: 'luzon-1', name: 'Benguet Aloe Garden', region: 'La Trinidad, Benguet', coordinates: { lat: 16.4551, lng: 120.5876 } },
+  { id: 'luzon-2', name: 'Ilocos Norte Aloe Hub', region: 'Laoag, Ilocos Norte', coordinates: { lat: 18.1987, lng: 120.5936 } },
+  { id: 'luzon-3', name: 'Pampanga Aloe Cooperative', region: 'San Fernando, Pampanga', coordinates: { lat: 15.0343, lng: 120.6840 } },
+  { id: 'luzon-4', name: 'Bulacan Aloe Farm', region: 'Malolos, Bulacan', coordinates: { lat: 14.8527, lng: 120.8160 } },
+  { id: 'luzon-5', name: 'Nueva Ecija Aloe Growers', region: 'Cabanatuan, Nueva Ecija', coordinates: { lat: 15.4863, lng: 120.9674 } },
+  { id: 'luzon-6', name: 'Batangas Aloe Nursery', region: 'Lipa, Batangas', coordinates: { lat: 13.9411, lng: 121.1620 } },
+  { id: 'luzon-7', name: 'Laguna Aloe Plant Center', region: 'Calamba, Laguna', coordinates: { lat: 14.2117, lng: 121.1653 } },
+  { id: 'luzon-8', name: 'Bicol Aloe Demo Farm', region: 'Naga, Camarines Sur', coordinates: { lat: 13.6218, lng: 123.1948 } },
+];
 
 function sanitizeNotifications(preferences = {}) {
   return {
@@ -25,6 +57,35 @@ function sanitizePrivacy(preferences = {}) {
   };
 }
 
+const buildTicketDisplay = (ticket) => ({
+  _id: ticket._id,
+  ticket_number: ticket.ticket_number || '',
+  issue_category: ticket.issue_category || ticket.category || 'other',
+  issue_category_label:
+    ISSUE_CATEGORY_LABELS[ticket.issue_category || ticket.category] || 'Other',
+  description: ticket.description || ticket.message || '',
+  full_name: ticket.full_name || '',
+  email: ticket.email || '',
+  mobile_unit: ticket.mobile_unit || '',
+  os_version: ticket.os_version || '',
+  issue_image_url: ticket.issue_image?.url || '',
+  status: ticket.status || 'open',
+  createdAt: ticket.createdAt,
+});
+
+const nextTicketNumber = async () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+  const nextYearStart = new Date(`${year + 1}-01-01T00:00:00.000Z`);
+
+  const yearlyCount = await SupportTicket.countDocuments({
+    createdAt: { $gte: yearStart, $lt: nextYearStart },
+  });
+
+  return `ALOE-${year}-${String(yearlyCount + 1).padStart(4, '0')}`;
+};
+
 exports.getAccountSettings = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -36,6 +97,7 @@ exports.getAccountSettings = asyncHandler(async (req, res) => {
         email: user.email,
         phone: user.phone || '',
         profile_image_url: user.profile_image?.url || '',
+        cover_image_url: user.cover_image?.url || '',
         language: user.preferences?.language || 'en',
         location: user.preferences?.location || '',
         farm_size: user.preferences?.farm_size || ''
@@ -76,6 +138,7 @@ exports.updateAccountSettings = asyncHandler(async (req, res) => {
         email: user.email,
         phone: user.phone || '',
         profile_image_url: user.profile_image?.url || '',
+        cover_image_url: user.cover_image?.url || '',
         language: user.preferences?.language || 'en',
         location: user.preferences?.location || '',
         farm_size: user.preferences?.farm_size || ''
@@ -116,6 +179,39 @@ exports.updateAccountAvatar = asyncHandler(async (req, res) => {
       user
     },
     message: 'Profile image updated successfully'
+  });
+});
+
+exports.updateAccountCover = asyncHandler(async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ success: false, error: 'Cover image file is required' });
+  }
+
+  const user = await User.findById(req.user.id);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  const uploaded = await uploadImage(req.file.buffer, 'pamada-cover');
+
+  if (user.cover_image?.public_id) {
+    await deleteImage(user.cover_image.public_id).catch(() => {});
+  }
+
+  user.cover_image = {
+    url: uploaded.secure_url || '',
+    public_id: uploaded.public_id || ''
+  };
+
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    data: {
+      cover_image_url: user.cover_image.url,
+      user
+    },
+    message: 'Cover image updated successfully'
   });
 });
 
@@ -199,32 +295,95 @@ exports.getHelpSupport = asyncHandler(async (req, res) => {
         { question: 'How do I improve detection accuracy?', answer: 'Use bright natural light and keep one leaf centered.' },
         { question: 'What if a scan fails?', answer: 'Retry with stable focus and check your internet connection.' }
       ],
-      recent_tickets: tickets
+      issue_categories: ISSUE_CATEGORIES.map((value) => ({
+        value,
+        label: ISSUE_CATEGORY_LABELS[value],
+      })),
+      recent_tickets: tickets.map(buildTicketDisplay),
     }
   });
 });
 
 exports.createSupportTicket = asyncHandler(async (req, res) => {
-  const { subject, message, category } = req.body;
+  const {
+    full_name,
+    email,
+    mobile_unit,
+    os_version,
+    issue_category,
+    description,
+  } = req.body;
 
-  if (!subject || !message) {
-    return res.status(400).json({ success: false, error: 'Subject and message are required' });
+  if (!full_name || !email || !mobile_unit || !os_version || !issue_category || !description) {
+    return res.status(400).json({
+      success: false,
+      error: 'Full name, email, mobile unit, OS version, issue category, and description are required',
+    });
   }
 
-  const allowedCategories = ['general', 'technical', 'billing', 'feedback'];
-  const normalizedCategory = allowedCategories.includes(category) ? category : 'general';
+  if (!ISSUE_CATEGORIES.includes(issue_category)) {
+    return res.status(400).json({ success: false, error: 'Invalid issue category' });
+  }
 
-  const ticket = await SupportTicket.create({
-    user_id: req.user.id,
-    subject,
-    message,
-    category: normalizedCategory
-  });
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(String(email).trim().toLowerCase())) {
+    return res.status(400).json({ success: false, error: 'Please provide a valid email address' });
+  }
+
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ success: false, error: 'Issue image is required' });
+  }
+
+  const uploaded = await uploadImage(req.file.buffer, 'pamada-support-tickets');
+
+  let ticket = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const ticketNumber = await nextTicketNumber();
+    try {
+      ticket = await SupportTicket.create({
+        ticket_number: ticketNumber,
+        user_id: req.user.id,
+        full_name: String(full_name).trim(),
+        email: String(email).trim().toLowerCase(),
+        mobile_unit: String(mobile_unit).trim(),
+        os_version: String(os_version).trim(),
+        issue_category,
+        description: String(description).trim(),
+        issue_image: {
+          url: uploaded.secure_url || '',
+          public_id: uploaded.public_id || '',
+        },
+      });
+      break;
+    } catch (error) {
+      const duplicateTicketNumber =
+        error?.code === 11000 &&
+        /ticket_number/.test(JSON.stringify(error?.keyPattern || error?.keyValue || {}));
+      if (duplicateTicketNumber) {
+        continue;
+      }
+      if (uploaded?.public_id) {
+        await deleteImage(uploaded.public_id).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  if (!ticket) {
+    if (uploaded?.public_id) {
+      await deleteImage(uploaded.public_id).catch(() => {});
+    }
+    return res.status(503).json({
+      success: false,
+      error: 'Unable to allocate ticket number. Please retry.',
+      code: 'TICKET_NUMBER_UNAVAILABLE',
+    });
+  }
 
   res.status(201).json({
     success: true,
     data: {
-      ticket
+      ticket: buildTicketDisplay(ticket),
     },
     message: 'Support request submitted successfully'
   });
@@ -241,5 +400,31 @@ exports.getAbout = asyncHandler(async (req, res) => {
       privacy_url: process.env.PRIVACY_URL || 'https://pamada.app/privacy',
       description: 'Pamada helps growers monitor Aloe Vera health using AI-assisted disease detection.'
     }
+  });
+});
+
+exports.getLuzonGardens = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      gardens: LUZON_GARDENS,
+      region: {
+        latitude: 15.95,
+        longitude: 121.0,
+        latitudeDelta: 6.8,
+        longitudeDelta: 5.8,
+      },
+    },
+  });
+});
+
+exports.getHomeHeroMedia = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      hero_gif_url:
+        process.env.HOME_HERO_GIF_URL ||
+        'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWJtZnZocGpvcWhiZW5lNjJhcDl1bWN3cDlhcDE4aXJrOWZoeWwzeCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/QZPxLiwj3c4G3dcnlz/giphy.gif',
+    },
   });
 });

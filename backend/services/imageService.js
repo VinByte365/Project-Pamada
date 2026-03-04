@@ -34,14 +34,22 @@ exports.uploadMedia = async (
   folder = 'aloe-vera-community',
   options = {}
 ) => {
+  const explicitType = options.resource_type || 'auto';
+  const mergedOptions = {
+    folder,
+    resource_type: explicitType,
+    timeout: parseInt(process.env.CLOUDINARY_UPLOAD_TIMEOUT_MS || '600000', 10),
+    ...options,
+  };
+
+  if (explicitType === 'image') {
+    mergedOptions.quality = mergedOptions.quality || 'auto';
+    mergedOptions.fetch_format = mergedOptions.fetch_format || 'auto';
+  }
+
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-        resource_type: 'auto',
-        quality: 'auto',
-        ...options,
-      },
+      mergedOptions,
       (error, result) => {
         if (error) {
           reject(error);
@@ -56,6 +64,27 @@ exports.uploadMedia = async (
     bufferStream.push(null);
     bufferStream.pipe(uploadStream);
   });
+};
+
+exports.uploadMediaFromPath = async (
+  filePath,
+  folder = 'aloe-vera-community',
+  options = {}
+) => {
+  const explicitType = options.resource_type || 'auto';
+  const mergedOptions = {
+    folder,
+    resource_type: explicitType,
+    timeout: parseInt(process.env.CLOUDINARY_UPLOAD_TIMEOUT_MS || '600000', 10),
+    ...options,
+  };
+
+  if (explicitType === 'image') {
+    mergedOptions.quality = mergedOptions.quality || 'auto';
+    mergedOptions.fetch_format = mergedOptions.fetch_format || 'auto';
+  }
+
+  return cloudinary.uploader.upload(filePath, mergedOptions);
 };
 
 // Generate thumbnail

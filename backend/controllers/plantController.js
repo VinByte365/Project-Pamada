@@ -20,6 +20,9 @@ exports.getPlants = asyncHandler(async (req, res) => {
   
   if (harvest_ready !== undefined) {
     query['current_status.harvest_ready'] = harvest_ready === 'true';
+    if (harvest_ready === 'true') {
+      query['current_status.lifecycle_stage'] = { $ne: 'harvested' };
+    }
   }
   
   if (health_status) {
@@ -153,10 +156,17 @@ exports.getPlantsByStatus = asyncHandler(async (req, res) => {
   const { status } = req.params;
   const { page = 1, limit = 10 } = req.query;
 
-  const query = {
-    owner_id: req.user.id,
-    'current_status.harvest_ready': status === 'harvest-ready'
-  };
+  const query = { owner_id: req.user.id };
+
+  if (status === 'harvested') {
+    query['current_status.lifecycle_stage'] = 'harvested';
+  } else if (status === 'harvest-ready') {
+    query['current_status.harvest_ready'] = true;
+    query['current_status.lifecycle_stage'] = { $ne: 'harvested' };
+  } else {
+    query['current_status.harvest_ready'] = false;
+    query['current_status.lifecycle_stage'] = { $ne: 'harvested' };
+  }
 
   if (status === 'diseased') {
     query['current_status.disease_severity'] = { $ne: 'none' };
@@ -178,6 +188,35 @@ exports.getPlantsByStatus = asyncHandler(async (req, res) => {
     data: {
       plants
     }
+  });
+});
+
+// @desc    Mark plant as harvested
+// @route   PUT /api/v1/plants/:id/harvested
+// @access  Private
+exports.markPlantHarvested = asyncHandler(async (req, res) => {
+  const plant = await Plant.findOne({
+    _id: req.params.id,
+    owner_id: req.user.id,
+  });
+
+  if (!plant) {
+    return res.status(404).json({
+      success: false,
+      error: 'Plant not found',
+    });
+  }
+
+  plant.current_status.lifecycle_stage = 'harvested';
+  plant.current_status.harvest_ready = false;
+  await plant.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Plant marked as harvested',
+    data: {
+      plant,
+    },
   });
 });
 

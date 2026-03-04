@@ -17,13 +17,6 @@ const conditionLabelMap = {
   spider_mite: 'Spider Mite',
 };
 
-const maturityPercentMap = {
-  immature: 35,
-  maturing: 70,
-  optimal: 92,
-  'over-mature': 98,
-};
-
 const defaultStats = [
   { label: 'Total Scans', value: '0', icon: 'camera', tone: 'primary' },
   { label: 'Healthy Plants', value: '0', icon: 'checkmark-circle', tone: 'success' },
@@ -47,25 +40,53 @@ export function AppDataProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [plantId, setPlantId] = useState(null);
 
-  const formatMaturityPercent = (scan) => {
-    const maturity = scan?.analysis_result?.maturity_assessment;
-    if (maturity && maturityPercentMap[maturity] !== undefined) {
-      return maturityPercentMap[maturity];
+  const formatMaturityReadiness = (scan) => {
+    const analysis = scan?.analysis_result || {};
+    const stage = String(analysis?.maturity_stage || '').toLowerCase().trim();
+    if (stage) {
+      if (stage.includes('no plant detected')) return 'No Plant Detected';
+      if (stage.includes('ready for harvest') || stage.includes('mature')) return 'Ready for Harvest';
+      if (stage.includes('developing') || stage.includes('almost ready')) return 'Almost Ready';
+      if (stage.includes('young') || stage.includes('not ready')) return 'Not Ready for Harvest';
+      return 'Not Ready for Harvest';
     }
-    const days = scan?.analysis_result?.estimated_days_to_harvest;
-    if (typeof days === 'number') {
-      const normalized = Math.max(20, Math.min(95, 100 - (days / 120) * 100));
-      return Math.round(normalized);
+
+    const assessment = String(analysis?.maturity_assessment || '').toLowerCase().trim();
+    if (assessment === 'optimal') return 'Ready for Harvest';
+    if (assessment === 'maturing') return 'Almost Ready';
+    if (assessment === 'immature') return 'Not Ready for Harvest';
+
+    if (analysis?.harvest_ready === true) return 'Ready for Harvest';
+
+    if (typeof analysis?.estimated_days_to_harvest === 'number') {
+      return analysis.estimated_days_to_harvest <= 0
+        ? 'Ready for Harvest'
+        : 'Not Ready for Harvest';
     }
-    return 70;
+
+    const hasAnalysis = Object.keys(analysis).length > 0;
+    return hasAnalysis ? 'Not Ready for Harvest' : 'Not Available';
   };
 
-  const normalizeScan = (scan) => {
+  const normalizeScan = (scan, fallbackScanNumber = null, previous = null) => {
     const createdAt = scan?.createdAt ? new Date(scan.createdAt) : new Date();
-    const maturityPercent = formatMaturityPercent(scan);
+    const noPlantDetected = String(scan?.analysis_result?.maturity_stage || '').toLowerCase().includes('no plant detected');
+    const maturity = formatMaturityReadiness(scan);
     const primaryClass = scan?.yolo_predictions?.[0]?.class
       || (scan?.analysis_result?.disease_detected ? 'leaf_spot' : 'healthy');
-    const status = scan?.analysis_result?.harvest_ready ? 'ready' : primaryClass;
+    const lifecycleStage = String(scan?.plant_id?.current_status?.lifecycle_stage || '').toLowerCase();
+    const status = lifecycleStage === 'harvested'
+      ? 'harvested'
+      : noPlantDetected
+        ? 'leaf_spot'
+        : (scan?.analysis_result?.harvest_ready ? 'ready' : primaryClass);
+    const resolvedScanNumber = Number(scan?.scan_number || fallbackScanNumber || previous?.scanNumber || 0) || null;
+    const basePlantName = scan?.plant_id?.plant_id
+      ? `${scan.plant_id.plant_id}${scan.plant_id.location?.plot_number ? ` - Plot ${scan.plant_id.location.plot_number}` : ''}`
+      : 'Aloe Vera Plant';
+    const scanName = resolvedScanNumber
+      ? `Scan #${String(resolvedScanNumber).padStart(4, '0')}`
+      : basePlantName;
     const diseases = (scan?.yolo_predictions || [])
       .filter((pred) => pred.class && pred.class !== 'healthy')
       .map((pred) => conditionLabelMap[pred.class] || pred.class);
@@ -74,7 +95,9 @@ export function AppDataProvider({ children }) {
       (best, pred) => (pred?.confidence > (best?.confidence || 0) ? pred : best),
       null
     );
-    const detectedSummary = scan?.analysis_result?.disease_detected
+    const detectedSummary = noPlantDetected
+      ? 'No plant detected'
+      : scan?.analysis_result?.disease_detected
       ? (scan?.analysis_result?.disease_details?.join(', ') || uniqueDiseases.join(', ') || 'Disease detected')
       : (scan?.analysis_result?.harvest_ready ? 'Ready for harvest' : 'Plant appears healthy');
     const confidenceLevel = topPrediction?.confidence
@@ -83,14 +106,15 @@ export function AppDataProvider({ children }) {
 
     return {
       id: scan?._id || scan?.scan_id || `${Date.now()}`,
-      plantName: scan?.plant_id?.plant_id
-        ? `${scan.plant_id.plant_id}${scan.plant_id.location?.plot_number ? ` - Plot ${scan.plant_id.location.plot_number}` : ''}`
-        : 'Aloe Vera Plant',
+      mongoId: scan?._id || previous?.mongoId || null,
+      plantMongoId: scan?.plant_id?._id || previous?.plantMongoId || null,
+      scanNumber: resolvedScanNumber,
+      plantName: scanName,
+      plantLabel: basePlantName,
       date: createdAt.toISOString().slice(0, 10),
       time: createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       status,
-      maturity: `${maturityPercent}%`,
-      maturityPercent,
+      maturity,
       image: scan?.image_data?.thumbnail_url || scan?.image_data?.original_url,
       diseases: uniqueDiseases,
       detectedSummary,
@@ -101,8 +125,10 @@ export function AppDataProvider({ children }) {
 
   const upsertScan = (scan) => {
     setScans((prev) => {
-      const normalized = normalizeScan(scan);
-      const index = prev.findIndex((item) => item.id === normalized.id);
+      const incomingId = scan?._id || scan?.scan_id;
+      const index = prev.findIndex((item) => item.id === incomingId);
+      const previous = index >= 0 ? prev[index] : null;
+      const normalized = normalizeScan(scan, previous?.scanNumber, previous);
       if (index === -1) {
         return [normalized, ...prev];
       }
@@ -213,7 +239,21 @@ export function AppDataProvider({ children }) {
       token,
     });
     const list = response?.data?.scans || [];
-    setScans(list.map(normalizeScan));
+    const chronological = [...list].sort(
+      (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+    );
+    const fallbackNumberMap = new Map();
+    chronological.forEach((entry, index) => {
+      const id = entry?._id || entry?.scan_id;
+      if (id) fallbackNumberMap.set(id, index + 1);
+    });
+    setScans(
+      list.map((entry) => {
+        const id = entry?._id || entry?.scan_id;
+        const fallbackNumber = fallbackNumberMap.get(id);
+        return normalizeScan(entry, fallbackNumber);
+      })
+    );
   };
 
   const refreshAnalytics = async () => {
@@ -292,6 +332,61 @@ export function AppDataProvider({ children }) {
     return scan;
   };
 
+  const analyzeScanPreview = async ({ imageUri }) => {
+    if (!token) {
+      throw new Error('You must be logged in to scan.');
+    }
+    const currentPlantId = await ensurePlant();
+    if (!currentPlantId) {
+      throw new Error('No plant is available for scanning.');
+    }
+
+    const formData = new FormData();
+    formData.append('plant_id', currentPlantId);
+    formData.append('image', {
+      uri: imageUri,
+      name: `scan-preview-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+    });
+
+    const response = await apiRequest('/api/v1/scans/analyze-preview', {
+      method: 'POST',
+      token,
+      body: formData,
+    });
+
+    const payload = response?.data || {};
+    return {
+      preview_id: payload.preview_id || '',
+      image_data: payload.image_data || {},
+      yolo_predictions: payload.yolo_predictions || [],
+      analysis_result: payload.analysis_result || {},
+      recommendations: payload.recommendations || payload.analysis_result?.recommendations || {},
+      processing_time_ms: payload.processing_time_ms || 0,
+    };
+  };
+
+  const confirmScanPreview = async ({ previewId, plantId }) => {
+    if (!token) {
+      throw new Error('You must be logged in to save scan.');
+    }
+    const response = await apiRequest('/api/v1/scans/confirm-preview', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({
+        preview_id: previewId,
+        plant_id: plantId || plantId === '' ? plantId : undefined,
+      }),
+    });
+
+    const scan = response?.data?.scan;
+    if (scan) {
+      upsertScan(scan);
+      refreshSummary().catch(() => {});
+    }
+    return scan;
+  };
+
   const fetchScanById = async (scanId) => {
     if (!token) return null;
     const response = await apiRequest(`/api/v1/scans/${scanId}`, {
@@ -303,6 +398,42 @@ export function AppDataProvider({ children }) {
       upsertScan(scan);
     }
     return scan;
+  };
+
+  const deleteScan = async (scanId) => {
+    if (!token) return;
+    await apiRequest(`/api/v1/scans/${scanId}`, {
+      method: 'DELETE',
+      token,
+    });
+    setScans((prev) => prev.filter((scan) => String(scan.id) !== String(scanId) && String(scan.mongoId) !== String(scanId)));
+    refreshSummary().catch(() => {});
+    refreshAnalytics().catch(() => {});
+  };
+
+  const markPlantHarvested = async (plantMongoId) => {
+    if (!token || !plantMongoId) {
+      throw new Error('Missing plant id');
+    }
+
+    await apiRequest(`/api/v1/plants/${plantMongoId}/harvested`, {
+      method: 'PUT',
+      token,
+    });
+
+    setScans((prev) =>
+      prev.map((scan) =>
+        String(scan.plantMongoId) === String(plantMongoId)
+          ? {
+              ...scan,
+              status: 'harvested',
+              urgency: 'Harvested',
+            }
+          : scan
+      )
+    );
+    refreshSummary().catch(() => {});
+    refreshAnalytics().catch(() => {});
   };
 
   useEffect(() => {
@@ -327,7 +458,11 @@ export function AppDataProvider({ children }) {
       refreshScans,
       refreshSummary,
       createScan,
+      analyzeScanPreview,
+      confirmScanPreview,
       fetchScanById,
+      deleteScan,
+      markPlantHarvested,
     }),
     [scans, stats, analytics, loading]
   );

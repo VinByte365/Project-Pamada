@@ -6,11 +6,15 @@ const {
   updateScan,
   deleteScan,
   getScansByPlant,
-  getMlHealth
+  getMlHealth,
+  liveDetect,
+  analyzePreview,
+  confirmPreview,
+  verifyAloeDebug,
 } = require('../controllers/scanController');
 const { protect } = require('../middlewares/auth');
 const upload = require('../middlewares/upload');
-const { scanLimiter } = require('../middlewares/rateLimiter');
+const { scanLimiter, liveDetectionLimiter } = require('../middlewares/rateLimiter');
 
 const router = express.Router();
 
@@ -22,6 +26,10 @@ router.route('/')
   .post(scanLimiter, upload.single('image'), createScan);
 
 router.get('/ml-health', getMlHealth);
+router.post('/live-detect', liveDetectionLimiter, upload.single('image'), liveDetect);
+router.post('/analyze-preview', scanLimiter, upload.single('image'), analyzePreview);
+router.post('/confirm-preview', scanLimiter, confirmPreview);
+router.post('/verify-aloe-debug', scanLimiter, upload.single('image'), verifyAloeDebug);
 
 router.route('/plant/:plantId')
   .get(getScansByPlant);

@@ -37,7 +37,7 @@ export default function Button({
         style={[styles.wrap, isDisabled && styles.disabled]}
       >
         {type === 'secondary' ? (
-          <View style={[styles.secondary, { backgroundColor: palette.surface.glass, borderColor: palette.surface.borderStrong }]}>
+          <View style={[styles.secondary, { backgroundColor: palette.surface.light, borderColor: palette.surface.borderStrong }]}>
             <View style={styles.row}>
               {icon ? <View style={styles.icon}>{icon}</View> : null}
               {loading ? <ActivityIndicator color={contentColor} /> : <Text style={[styles.label, { color: contentColor }]}>{label}</Text>}
@@ -45,7 +45,7 @@ export default function Button({
           </View>
         ) : (
           <LinearGradient
-            colors={[palette.accent.action, '#6E8A72']}
+            colors={[palette.primary.start, palette.primary.end]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.base}
@@ -68,15 +68,15 @@ const styles = StyleSheet.create({
     ...shadows.surface,
   },
   base: {
-    minHeight: 46,
-    paddingHorizontal: spacing.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
     borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondary: {
-    minHeight: 46,
-    paddingHorizontal: spacing.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
     borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',

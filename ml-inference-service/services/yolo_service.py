@@ -19,7 +19,7 @@ class YOLOService:
 
     def _resolve_model_path(self, model_path):
         if model_path is None:
-            model_path = os.getenv('MODEL_PATH', 'models/AV1.pt')
+            model_path = os.getenv('MODEL_PATH', 'models/AV3.pt')
 
         path = Path(model_path)
         if path.is_absolute():
@@ -47,16 +47,46 @@ class YOLOService:
         load_wrapper.__aloevera_patched__ = True
         torch.load = load_wrapper
 
-    def _infer_class_names(self):
-        override = os.getenv('MODEL_CLASSES')
-        if override:
-            return [item.strip() for item in override.split(',') if item.strip()]
+    @staticmethod
+    def _normalize_class_name(value):
+        raw = str(value or '').strip().lower().replace('-', '_').replace(' ', '_')
+        aliases = {
+            'leaf_spots': 'leaf_spot',
+            'leafspot': 'leaf_spot',
+            'leafspots': 'leaf_spot',
+            'sun_burn': 'sunburn',
+            'rootrot': 'root_rot',
+            'aloe_rusts': 'aloe_rust',
+        }
+        return aliases.get(raw, raw or 'unknown')
 
+    def _get_model_class_names(self):
         names = getattr(self.model, 'names', None)
         if isinstance(names, dict):
             return [names[i] for i in sorted(names.keys())]
         if isinstance(names, (list, tuple)):
             return list(names)
+        return []
+
+    def _infer_class_names(self):
+        model_names = self._get_model_class_names()
+        if model_names:
+            model_names = [self._normalize_class_name(item) for item in model_names]
+
+        override = os.getenv('MODEL_CLASSES')
+        if override:
+            override_names = [self._normalize_class_name(item) for item in override.split(',') if item.strip()]
+            if model_names and override_names != model_names:
+                print(
+                    'Warning: MODEL_CLASSES does not match model label order. '
+                    'Using model labels to prevent class mismatch.'
+                )
+            elif override_names:
+                return override_names
+
+        if model_names:
+            return model_names
+
         return [
             'healthy',
             'leaf_spot',
@@ -70,8 +100,8 @@ class YOLOService:
             'spider_mite'
         ]
 
-    def predict(self, image):
-        results = self.model(image, conf=0.25, iou=0.45)
+    def predict(self, image, conf=0.25, iou=0.45, include_fallback=True):
+        results = self.model(image, conf=conf, iou=iou)
         predictions = []
 
         for result in results:
@@ -85,6 +115,7 @@ class YOLOService:
                     class_name = self.class_names[class_id]
                 else:
                     class_name = 'unknown'
+                class_name = self._normalize_class_name(class_name)
 
                 predictions.append({
                     'class': class_name,
@@ -97,7 +128,7 @@ class YOLOService:
                     }
                 })
 
-        if not predictions:
+        if include_fallback and not predictions:
             predictions.append({
                 'class': 'healthy',
                 'confidence': 0.5,

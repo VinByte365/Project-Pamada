@@ -10,11 +10,13 @@ class ImagePreprocessor:
 
     def preprocess(self, image_bytes):
         try:
-            image = Image.open(BytesIO(image_bytes))
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            with Image.open(BytesIO(image_bytes)) as image:
+                # Fully decode image before conversion to avoid lazy-loader issues.
+                image.load()
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+                image_array = np.asarray(image).copy()
 
-            image_array = np.array(image)
             image_array = self._resize_with_aspect_ratio(image_array)
             return image_array
         except Exception as exc:
