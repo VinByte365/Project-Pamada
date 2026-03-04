@@ -5,7 +5,15 @@ const { uploadImage, generateThumbnail } = require('../services/imageService');
 const { processScanAsync, processScanAnalysis } = require('../services/scanAnalysisService');
 const mlService = require('../services/mlService');
 const aloeVerificationService = require('../services/aloeVerificationService');
+const PlantScan = require('../models/plantScan');
+const Recommendation = require('../models/recommendation');
 const asyncHandler = require('../utils/controllerWrapper');
+const {
+  buildStructuredRecommendationsByDiseaseKey,
+  createPlantScanWithRecommendations,
+  getStructuredRecommendationsByPlantScanId,
+  markRecommendationCompletion,
+} = require('../services/presetRecommendationService');
 const {
   normalizePrimaryCondition,
   normalizeDiseaseSeverity,
@@ -46,6 +54,122 @@ function cleanupExpiredPreviews() {
       previewStore.delete(key);
     }
   }
+}
+
+function extractDiseasePayload(mlResults = {}, analysisResult = {}) {
+  const rawDiseaseKey = String(
+    mlResults?.disease_key ||
+    mlResults?.disease_result?.disease_key ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+  const yoloClass = String(mlResults?.yolo_predictions?.[0]?.class || '').trim().toLowerCase();
+  const aliasMap = {
+    fungal_infection: 'fungal_infection',
+    leaf_spot: 'fungal_infection',
+    aloe_rust: 'fungal_infection',
+    anthracnose: 'fungal_infection',
+    root_rot: 'root_rot',
+    bacterial_soft_rot: 'bacterial_spot',
+    bacterial_spot: 'bacterial_spot',
+    healthy: 'healthy',
+    sunburn: 'unknown_condition',
+    scale_insect: 'unknown_condition',
+    mealybug: 'unknown_condition',
+    spider_mite: 'unknown_condition',
+  };
+  const diseaseKey = aliasMap[rawDiseaseKey] || aliasMap[yoloClass] || 'unknown_condition';
+  const confidence = Number(
+    mlResults?.confidence ??
+    mlResults?.disease_result?.confidence ??
+    analysisResult?.confidence_score ??
+    0
+  );
+  const severity = String(
+    mlResults?.severity ||
+    mlResults?.disease_result?.severity ||
+    analysisResult?.disease_severity ||
+    'medium'
+  )
+    .trim()
+    .toLowerCase();
+
+  return { diseaseKey, confidence, severity };
+}
+
+function toRecommendationSeverity(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'high' || normalized === 'medium' || normalized === 'low') {
+    return normalized;
+  }
+  if (normalized === 'severe') return 'high';
+  if (normalized === 'moderate') return 'medium';
+  if (normalized === 'mild') return 'low';
+  return 'medium';
+}
+
+async function ensurePlantScanLink(scan) {
+  if (!scan) return null;
+  if (scan.plant_scan_id) return scan;
+
+  const existingLink = await PlantScan.findOne({ legacy_scan_id: scan._id });
+  if (existingLink) {
+    scan.plant_scan_id = existingLink._id;
+    scan.disease_id = existingLink.disease_id;
+    await scan.save();
+    return scan;
+  }
+
+  const diseaseKey = String(scan.disease_key || '').trim().toLowerCase();
+  if (!diseaseKey) {
+    return null;
+  }
+
+  const confidence = Number(
+    scan?.analysis_result?.confidence_score ??
+    scan?.yolo_predictions?.[0]?.confidence ??
+    0
+  );
+  const severity = toRecommendationSeverity(scan?.analysis_result?.disease_severity);
+
+  const linked = await createPlantScanWithRecommendations({
+    userId: scan.user_id,
+    plantId: scan.plant_id,
+    diseaseKey,
+    confidence,
+    severity,
+    legacyScanId: scan._id,
+  });
+
+  scan.plant_scan_id = linked.plantScan._id;
+  scan.disease_id = linked.plantScan.disease_id;
+  await scan.save();
+  return scan;
+}
+
+async function remapToHealthyPresetIfNeeded(scan) {
+  if (!scan?.plant_scan_id) return scan;
+  const isHealthyResult = scan?.analysis_result?.disease_detected === false;
+  const isUnknown = String(scan?.disease_key || '').toLowerCase() === 'unknown_condition';
+  if (!isHealthyResult || !isUnknown) {
+    return scan;
+  }
+
+  const linked = await createPlantScanWithRecommendations({
+    userId: scan.user_id,
+    plantId: scan.plant_id,
+    diseaseKey: 'healthy',
+    confidence: Number(scan?.analysis_result?.confidence_score || 0.8),
+    severity: 'low',
+    legacyScanId: scan._id,
+  });
+
+  scan.plant_scan_id = linked.plantScan._id;
+  scan.disease_id = linked.plantScan.disease_id;
+  scan.disease_key = 'healthy';
+  await scan.save();
+  return scan;
 }
 
 async function verifyAloeOrFallback(imageBuffer) {
@@ -247,15 +371,25 @@ exports.createScan = asyncHandler(async (req, res) => {
   if (syncProcessing) {
     try {
       const updatedScan = await processScanAnalysis(scan._id.toString(), req.file.buffer);
+      const structuredRecommendations = updatedScan?.plant_scan_id
+        ? await getStructuredRecommendationsByPlantScanId(updatedScan.plant_scan_id)
+        : null;
       return res.status(201).json({
         success: true,
         data: {
-          scan: updatedScan
+          scan: updatedScan,
+          recommendation_payload: structuredRecommendations?.payload || null,
         },
         message: 'Scan created and analyzed successfully.'
       });
     } catch (error) {
       console.error('Sync scan analysis failed:', error);
+      if (error?.code === 'DISEASE_KEY_NOT_MAPPED' || String(error?.message || '').toLowerCase().includes('disease_key')) {
+        return res.status(422).json({
+          success: false,
+          error: error.message || 'No preset mapping found for disease_key.',
+        });
+      }
       return res.status(201).json({
         success: true,
         data: {
@@ -316,6 +450,20 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
   });
   let analysisResult = mlService.generateAnalysisResult(mlResults);
   analysisResult = coerceNoPlantForVerifiedAloe(analysisResult, verifyResult, mlResults);
+  const diseasePayload = extractDiseasePayload(mlResults, analysisResult);
+  const structuredRecommendationPayload = diseasePayload.diseaseKey
+    ? await buildStructuredRecommendationsByDiseaseKey({
+        diseaseKey: diseasePayload.diseaseKey,
+        confidence: diseasePayload.confidence,
+        severity: diseasePayload.severity,
+      })
+    : null;
+  if (!structuredRecommendationPayload) {
+    return res.status(422).json({
+      success: false,
+      error: `No preset recommendation mapping found for disease_key: ${diseasePayload.diseaseKey || 'unknown'}`,
+    });
+  }
   const verificationDebug = buildVerificationDebug(verifyResult, mlResults, analysisResult);
   const allowScan = verificationDebug.allow_scan;
 
@@ -346,7 +494,10 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
     yolo_predictions: mlResults.yolo_predictions || [],
     visual_features: mlResults.visual_features || {},
     analysis_result: analysisResult,
-    recommendations: analysisResult.recommendations || {},
+    recommendation_payload: structuredRecommendationPayload,
+    disease_key: diseasePayload.diseaseKey,
+    disease_confidence: diseasePayload.confidence,
+    disease_severity: diseasePayload.severity,
     processing_time_ms: mlResults.processing_time_ms || 0,
     app_version: req.body.app_version || '1.0.0',
     device_type: req.headers['user-agent'],
@@ -363,7 +514,12 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
       yolo_predictions: mlResults.yolo_predictions || [],
       visual_features: mlResults.visual_features || {},
       analysis_result: analysisResult,
-      recommendations: analysisResult.recommendations || {},
+      recommendation_payload: structuredRecommendationPayload,
+      disease_key: diseasePayload.diseaseKey,
+      confidence: structuredRecommendationPayload.confidence,
+      severity: structuredRecommendationPayload.severity,
+      disease: structuredRecommendationPayload.disease,
+      recommendations: structuredRecommendationPayload.recommendations,
       processing_time_ms: mlResults.processing_time_ms || 0,
       verification: verificationDebug,
     },
@@ -442,6 +598,12 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
       error: 'Plant not found. Please create a plant profile first.',
     });
   }
+  if (!preview.disease_key) {
+    return res.status(422).json({
+      success: false,
+      error: 'Preview is missing disease_key. Please run scan analysis again.',
+    });
+  }
 
   const scanCount = await Scan.countDocuments({ user_id: req.user.id });
   const scan = await Scan.create({
@@ -452,14 +614,30 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
     yolo_predictions: preview.yolo_predictions || [],
     visual_features: preview.visual_features || {},
     analysis_result: preview.analysis_result || {},
-    recommendations: preview.recommendations || {},
     scan_metadata: {
       device_type: preview.device_type,
       app_version: preview.app_version || '1.0.0',
       processing_time_ms: preview.processing_time_ms || 0,
       model_version: process.env.MODEL_VERSION || '1.0.0',
     },
+    disease_key: preview.disease_key || undefined,
   });
+
+  let recommendationPayload = null;
+  if (preview.disease_key) {
+    const linked = await createPlantScanWithRecommendations({
+      userId: req.user.id,
+      plantId: plant._id,
+      diseaseKey: preview.disease_key,
+      confidence: preview.disease_confidence,
+      severity: preview.disease_severity,
+      legacyScanId: scan._id,
+    });
+    recommendationPayload = linked.payload;
+    scan.plant_scan_id = linked.plantScan._id;
+    scan.disease_id = linked.plantScan.disease_id;
+    await scan.save();
+  }
 
   await Plant.updateOne(
     { _id: plant._id, owner_id: req.user.id },
@@ -472,6 +650,7 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
     success: true,
     data: {
       scan,
+      recommendation_payload: recommendationPayload,
     },
     message: 'Scan saved successfully.',
   });
@@ -596,6 +775,147 @@ exports.getScan = asyncHandler(async (req, res) => {
     data: {
       scan
     }
+  });
+});
+
+// @desc    Get structured recommendations for a scan
+// @route   GET /api/v1/scans/:id/recommendations
+// @access  Private
+exports.getScanRecommendations = asyncHandler(async (req, res) => {
+  const scan = await Scan.findOne({
+    _id: req.params.id,
+    user_id: req.user.id,
+  });
+
+  if (!scan) {
+    return res.status(404).json({
+      success: false,
+      error: 'Scan not found',
+    });
+  }
+
+  let linkedScan;
+  try {
+    linkedScan = await ensurePlantScanLink(scan);
+  } catch (error) {
+    if (error?.code === 'DISEASE_KEY_NOT_MAPPED') {
+      return res.status(422).json({
+        success: false,
+        error: error.message,
+      });
+    }
+    throw error;
+  }
+  if (!linkedScan?.plant_scan_id) {
+    return res.status(404).json({
+      success: false,
+      error: 'No linked plant scan recommendation data found. This scan may predate disease_key linkage.',
+    });
+  }
+  linkedScan = await remapToHealthyPresetIfNeeded(linkedScan);
+
+  const data = await getStructuredRecommendationsByPlantScanId(linkedScan.plant_scan_id);
+  if (!data) {
+    return res.status(404).json({
+      success: false,
+      error: 'No recommendation data found for this scan.',
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      plant_scan_id: linkedScan.plant_scan_id,
+      ...data.payload,
+    },
+  });
+});
+
+// @desc    Mark recommendation log completion for a scan
+// @route   PATCH /api/v1/scans/:id/recommendations/:recommendationId
+// @access  Private
+exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
+  const scan = await Scan.findOne({
+    _id: req.params.id,
+    user_id: req.user.id,
+  });
+
+  if (!scan) {
+    return res.status(404).json({
+      success: false,
+      error: 'Scan not found',
+    });
+  }
+
+  let linkedScan;
+  try {
+    linkedScan = await ensurePlantScanLink(scan);
+  } catch (error) {
+    if (error?.code === 'DISEASE_KEY_NOT_MAPPED') {
+      return res.status(422).json({
+        success: false,
+        error: error.message,
+      });
+    }
+    throw error;
+  }
+  if (!linkedScan?.plant_scan_id) {
+    return res.status(404).json({
+      success: false,
+      error: 'No linked plant scan recommendation data found. This scan may predate disease_key linkage.',
+    });
+  }
+  linkedScan = await remapToHealthyPresetIfNeeded(linkedScan);
+
+  const recommendation = await Recommendation.findById(req.params.recommendationId);
+  if (!recommendation) {
+    return res.status(404).json({
+      success: false,
+      error: 'Recommendation not found.',
+    });
+  }
+
+  const linkedPlantScan = await PlantScan.findById(linkedScan.plant_scan_id);
+  if (!linkedPlantScan) {
+    return res.status(404).json({
+      success: false,
+      error: 'Plant scan not found for this scan.',
+    });
+  }
+
+  if (String(recommendation.disease_id) !== String(linkedPlantScan.disease_id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Recommendation does not belong to this scan disease mapping.',
+    });
+  }
+
+  const completed = req.body?.completed !== undefined ? Boolean(req.body.completed) : true;
+  const completionResult = await markRecommendationCompletion({
+    plantScanId: linkedScan.plant_scan_id,
+    recommendationId: recommendation._id,
+    completed,
+  });
+
+  if (!completionResult?.log) {
+    return res.status(404).json({
+      success: false,
+      error: 'Recommendation log not found for this scan.',
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      recommendation_log: {
+        id: completionResult.log._id,
+        plant_scan_id: completionResult.log.plant_scan_id,
+        recommendation_id: completionResult.log.recommendation_id,
+        completed: completionResult.log.completed,
+        completed_at: completionResult.log.completed_at,
+      },
+      care_plan: completionResult.care_plan,
+    },
   });
 });
 
@@ -739,4 +1059,3 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
     }
   });
 });
-

@@ -11,6 +11,8 @@ const {
   analyzePreview,
   confirmPreview,
   verifyAloeDebug,
+  getScanRecommendations,
+  updateScanRecommendationCompletion,
 } = require('../controllers/scanController');
 const { protect } = require('../middlewares/auth');
 const upload = require('../middlewares/upload');
@@ -30,6 +32,8 @@ router.post('/live-detect', liveDetectionLimiter, upload.single('image'), liveDe
 router.post('/analyze-preview', scanLimiter, upload.single('image'), analyzePreview);
 router.post('/confirm-preview', scanLimiter, confirmPreview);
 router.post('/verify-aloe-debug', scanLimiter, upload.single('image'), verifyAloeDebug);
+router.get('/:id/recommendations', getScanRecommendations);
+router.patch('/:id/recommendations/:recommendationId', updateScanRecommendationCompletion);
 
 router.route('/plant/:plantId')
   .get(getScansByPlant);

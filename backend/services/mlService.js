@@ -1,6 +1,5 @@
 const axios = require('axios');
 const FormData = require('form-data');
-const fs = require('fs');
 
 class MLService {
   constructor() {
@@ -67,11 +66,31 @@ class MLService {
       }
     );
 
-    if (!response.data?.success) {
-      throw new Error(response.data?.error || 'ML disease endpoint error');
+    const payload = response.data || {};
+
+    // New microservice payload format:
+    // { disease_key, confidence, severity }
+    if (payload?.disease_key) {
+      return {
+        disease_key: String(payload.disease_key || '').toLowerCase(),
+        confidence_score: Number(payload.confidence || 0),
+        severity: String(payload.severity || 'medium').toLowerCase(),
+        yolo_predictions: [],
+        visual_features: {},
+        age_estimation: {},
+        processing_time_ms: Number(payload.processing_time_ms || 0),
+      };
     }
 
-    return response.data.data;
+    if (!payload?.success) {
+      throw new Error(payload?.error || 'ML disease endpoint error');
+    }
+
+    const oldData = payload.data || {};
+    if (oldData?.disease_key) {
+      oldData.disease_key = String(oldData.disease_key || '').toLowerCase();
+    }
+    return oldData;
   }
 
   async analyzeMaturity(imageBuffer, metadata = {}) {
@@ -153,6 +172,13 @@ class MLService {
    */
   generateAnalysisResult(mlResults, plant = null) {
     const { yolo_predictions, visual_features, age_estimation, confidence_score, maturity_data } = mlResults;
+    const diseaseKey = String(
+      mlResults?.disease_key ||
+      mlResults?.disease_result?.disease_key ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
     const stageText = String(maturity_data?.maturity_stage || '');
     const stageLower = stageText.toLowerCase();
     const noPlantDetected = stageLower.includes('no plant detected');
@@ -184,10 +210,15 @@ class MLService {
     const primaryPrediction = yolo_predictions && yolo_predictions.length > 0
       ? yolo_predictions[0]
       : { class: 'healthy', confidence: 0.5 };
+    const diseaseDetectedByKey = Boolean(diseaseKey && diseaseKey !== 'healthy');
 
     // Determine disease severity
     let diseaseSeverity = 'none';
-    if (primaryPrediction.class !== 'healthy') {
+    if (diseaseDetectedByKey || primaryPrediction.class !== 'healthy') {
+      if (mlResults?.severity && ['high', 'medium', 'low'].includes(String(mlResults.severity).toLowerCase())) {
+        const severityMap = { high: 'severe', medium: 'moderate', low: 'mild' };
+        diseaseSeverity = severityMap[String(mlResults.severity).toLowerCase()] || 'moderate';
+      } else
       if (primaryPrediction.confidence >= 0.8) {
         diseaseSeverity = 'severe';
       } else if (primaryPrediction.confidence >= 0.6) {
@@ -199,8 +230,9 @@ class MLService {
 
     // Calculate health score (0-100)
     let healthScore = 100;
-    if (primaryPrediction.class !== 'healthy') {
-      healthScore = Math.max(0, 100 - (primaryPrediction.confidence * 50));
+    if (diseaseDetectedByKey || primaryPrediction.class !== 'healthy') {
+      const penaltyBase = mlResults?.confidence ?? primaryPrediction.confidence;
+      healthScore = Math.max(0, 100 - (Number(penaltyBase || 0.5) * 50));
     }
     
     // Adjust based on visual features
@@ -225,27 +257,23 @@ class MLService {
     }
 
     // Generate recommendations
-    const recommendations = this.generateRecommendations(
-      primaryPrediction.class,
-      diseaseSeverity,
-      {
-        maturity_assessment: maturityAssessment,
-        estimated_days_to_harvest: estimatedDays,
-      }
-    );
-
     return {
       leaf_count: Number(maturity_data?.leaf_count || 0),
       maturity_stage: maturity_data?.maturity_stage || null,
       harvest_ready: harvestReady,
       maturity_assessment: maturityAssessment,
       health_score: Math.round(healthScore),
-      disease_detected: primaryPrediction.class !== 'healthy',
+      disease_detected: diseaseDetectedByKey || primaryPrediction.class !== 'healthy',
       disease_severity: diseaseSeverity,
       recommended_action: recommendedAction,
       estimated_days_to_harvest: estimatedDays,
       confidence_score: confidence_score || 0.5,
-      recommendations,
+      recommendations: {
+        treatment_plan: [],
+        preventive_measures: [],
+        follow_up_required: false,
+        next_scan_date: null,
+      },
     };
   }
 

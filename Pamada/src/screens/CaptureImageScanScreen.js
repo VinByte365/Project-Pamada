@@ -79,16 +79,14 @@ export default function CaptureImageScanScreen() {
             : 'Not Available';
     const primaryClass =
       scan?.yolo_predictions?.[0]?.class || (scan?.analysis_result?.disease_detected ? 'leaf_spot' : 'healthy');
-    const diseases = (scan?.yolo_predictions || [])
-      .filter((pred) => pred.class && pred.class !== 'healthy')
-      .map((pred) => pred.class.replace(/_/g, ' '));
-    const recommendations = [
-      ...(scan?.recommendations?.treatment_plan || scan?.analysis_result?.recommendations?.treatment_plan || []),
-      ...(scan?.recommendations?.preventive_measures || scan?.analysis_result?.recommendations?.preventive_measures || []),
-    ];
+    const diseaseFromPayload = scan?.recommendation_payload?.disease;
+    const diseaseList = diseaseFromPayload ? [diseaseFromPayload] : [];
+    const structuredRecommendations = Array.isArray(scan?.recommendation_payload?.recommendations)
+      ? scan.recommendation_payload.recommendations
+      : [];
     const confidenceScore = noPlantDetected
       ? 0
-      : (scan?.analysis_result?.confidence_score || scan?.yolo_predictions?.[0]?.confidence);
+      : Number(scan?.recommendation_payload?.confidence ?? scan?.analysis_result?.confidence_score ?? 0);
     const confidence = noPlantDetected ? 'N/A' : (confidenceScore ? `${Math.round(confidenceScore * 100)}%` : 'N/A');
 
     return {
@@ -96,10 +94,12 @@ export default function CaptureImageScanScreen() {
       maturityStage,
       noPlantDetected,
       healthStatus: noPlantDetected ? 'leaf_spot' : (primaryClass === 'healthy' ? 'healthy' : primaryClass),
-      diseases: diseases.length ? diseases : [],
+      diseases: diseaseList.length ? diseaseList : [],
       recommendations: noPlantDetected
         ? ['No plant detected. Please retake the scan with one aloe vera plant centered in frame.']
-        : (recommendations.length ? recommendations : ['Scan saved. Analysis will update shortly.']),
+        : (structuredRecommendations.length
+            ? structuredRecommendations.map((item) => item.text)
+            : ['No preset recommendations configured for this disease key.']),
       confidence,
       confidenceNumber: confidenceScore ? Math.round(confidenceScore * 100) : 0,
     };

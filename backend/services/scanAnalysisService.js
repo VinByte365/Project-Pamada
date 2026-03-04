@@ -1,6 +1,35 @@
 const Scan = require('../models/scan');
 const mlService = require('./mlService');
-const { uploadImage } = require('./imageService');
+const {
+  createPlantScanWithRecommendations,
+  getStructuredRecommendationsByPlantScanId,
+} = require('./presetRecommendationService');
+
+function resolveDiseaseKey(mlResults = {}) {
+  const rawDiseaseKey = String(
+    mlResults?.disease_key ||
+    mlResults?.disease_result?.disease_key ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+  const yoloClass = String(mlResults?.yolo_predictions?.[0]?.class || '').trim().toLowerCase();
+  const aliasMap = {
+    fungal_infection: 'fungal_infection',
+    leaf_spot: 'fungal_infection',
+    aloe_rust: 'fungal_infection',
+    anthracnose: 'fungal_infection',
+    root_rot: 'root_rot',
+    bacterial_soft_rot: 'bacterial_spot',
+    bacterial_spot: 'bacterial_spot',
+    healthy: 'healthy',
+    sunburn: 'unknown_condition',
+    scale_insect: 'unknown_condition',
+    mealybug: 'unknown_condition',
+    spider_mite: 'unknown_condition',
+  };
+  return aliasMap[rawDiseaseKey] || aliasMap[yoloClass] || 'unknown_condition';
+}
 
 /**
  * Process scan image and generate analysis
@@ -31,6 +60,29 @@ async function processScanAnalysis(scanId, imageBuffer) {
     scan.recommendations = analysisResult.recommendations || {};
     scan.scan_metadata.processing_time_ms = mlResults.processing_time_ms || 0;
     scan.scan_metadata.model_version = process.env.MODEL_VERSION || '1.0.0';
+
+    const diseaseKey = resolveDiseaseKey(mlResults);
+    const mappedSeverity = String(mlResults?.severity || '').toLowerCase();
+    const mappedConfidence = Number(mlResults?.confidence ?? mlResults?.confidence_score ?? 0);
+
+    scan.disease_key = diseaseKey;
+    if (scan.plant_scan_id) {
+      const linked = await getStructuredRecommendationsByPlantScanId(scan.plant_scan_id);
+      if (linked?.plantScan) {
+        scan.disease_id = linked.plantScan.disease_id?._id || linked.plantScan.disease_id;
+      }
+    } else {
+      const created = await createPlantScanWithRecommendations({
+        userId: scan.user_id,
+        plantId: scan.plant_id,
+        diseaseKey,
+        confidence: mappedConfidence,
+        severity: mappedSeverity || 'medium',
+        legacyScanId: scan._id,
+      });
+      scan.plant_scan_id = created.plantScan._id;
+      scan.disease_id = created.plantScan.disease_id;
+    }
 
     // Check if low confidence - flag for validation
     if (mlResults.confidence_score < 0.7) {

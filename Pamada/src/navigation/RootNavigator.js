@@ -17,6 +17,7 @@ import MessagesScreen from '../screens/MessagesScreen';
 import ConversationScreen from '../screens/ConversationScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import CreateCommunityPostScreen from '../screens/CreateCommunityPostScreen';
+import DiseaseNurseryScreen from '../screens/DiseaseNurseryScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { colors } from '../theme';
 
@@ -52,6 +53,7 @@ export default function RootNavigator() {
           <Stack.Screen name="Conversation" component={ConversationScreen} />
           <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
           <Stack.Screen name="CreateCommunityPost" component={CreateCommunityPostScreen} />
+          <Stack.Screen name="DiseaseNursery" component={DiseaseNurseryScreen} />
         </>
       ) : (
         <Stack.Screen name="Auth" component={AuthStack} />

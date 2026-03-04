@@ -45,13 +45,23 @@ export default function HistoryScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { palette } = useAppTheme();
-  const { scans, refreshScans, deleteScan, markPlantHarvested } = useAppData();
+  const {
+    scans,
+    refreshScans,
+    deleteScan,
+    markPlantHarvested,
+  } = useAppData();
   const { showSnackbar } = useSnackbar();
   const [filter, setFilter] = useState('all');
   const [selectedScan, setSelectedScan] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showRefreshToast, setShowRefreshToast] = useState(false);
   const [showDeleteToast, setShowDeleteToast] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    overview: true,
+    conditions: true,
+    actions: true,
+  });
 
   const data = useMemo(() => {
     const isDiseaseStatus = (status) => Boolean(status && status !== 'healthy' && status !== 'ready' && status !== 'harvested');
@@ -70,12 +80,27 @@ export default function HistoryScreen() {
     });
   }, [scans, filter, palette]);
 
-  const recommendationItems = useMemo(() => {
-    if (!selectedScan?.raw) return [];
-    const treatment = selectedScan.raw?.recommendations?.treatment_plan || [];
-    const preventive = selectedScan.raw?.recommendations?.preventive_measures || [];
-    return [...treatment, ...preventive].slice(0, 6);
-  }, [selectedScan]);
+  const openDiseaseNursery = () => {
+    if (!selectedScan) return;
+    const scanId = selectedScan.mongoId || selectedScan.id;
+    if (!scanId) {
+      showSnackbar({ type: 'warning', message: 'Missing scan id for disease nursery.' });
+      return;
+    }
+    const nextPlantName = selectedScan.plantName || 'Aloe Vera Plant';
+    setSelectedScan(null);
+    navigation.navigate('DiseaseNursery', {
+      scanId,
+      plantName: nextPlantName,
+    });
+  };
+
+  const toggleSection = (key) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -149,6 +174,9 @@ export default function HistoryScreen() {
             <Text style={[styles.headerSubtitle, { color: palette.text.secondary }]}>
               Browse plants by health status and urgency
             </Text>
+            <Text style={[styles.headerMeta, { color: palette.text.tertiary }]}>
+              {data.length} scan records available
+            </Text>
           </View>
         </View>
 
@@ -204,139 +232,193 @@ export default function HistoryScreen() {
         onRequestClose={() => setSelectedScan(null)}
       >
         <View style={styles.modalBackdrop}>
-          <ScrollView contentContainerStyle={styles.modalScroll}>
-            <View style={[styles.modalCard, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
-              <View style={styles.modalHeader}>
+          <View style={styles.modalScroll}>
+            <ScrollView
+              contentContainerStyle={styles.modalContentScroll}
+              stickyHeaderIndices={[0]}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={[styles.modalStickyHeader, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
                 <Text style={[styles.modalTitle, { color: palette.text.primary }]}>Scan Details</Text>
                 <TouchableOpacity onPress={() => setSelectedScan(null)}>
                   <Ionicons name="close" size={20} color={palette.text.secondary} />
                 </TouchableOpacity>
               </View>
 
-              {selectedScan?.image ? (
-                <Image source={{ uri: selectedScan.image }} style={styles.modalImage} resizeMode="cover" />
-              ) : null}
+              <View style={[styles.modalCard, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
+                {selectedScan?.image ? (
+                  <Image source={{ uri: selectedScan.image }} style={styles.modalImage} resizeMode="cover" />
+                ) : null}
 
-              <Text style={[styles.detailName, { color: palette.text.primary }]}>{selectedScan?.plantName || 'Aloe Vera Plant'}</Text>
-              <Text style={[styles.detailMeta, { color: palette.text.secondary }]}>
-                {selectedScan?.date || '-'}{selectedScan?.time ? ` - ${selectedScan.time}` : ''}
-              </Text>
-              {selectedScan?.plantLabel ? (
-                <Text style={[styles.detailMeta, { color: palette.text.tertiary }]}>
-                  {selectedScan.plantLabel}
-                </Text>
-              ) : null}
-
-              <View style={styles.badgeRow}>
-                <Badge
-                  label={
-                    selectedScan?.status === 'ready'
-                      ? 'Harvest Ready'
-                      : selectedScan?.status === 'harvested'
-                        ? 'Harvested'
-                        : toTitle(selectedScan?.status || 'healthy')
-                  }
-                  type={
-                    selectedScan?.status === 'healthy'
-                      ? 'success'
-                      : selectedScan?.status === 'ready' || selectedScan?.status === 'harvested'
-                        ? 'info'
-                        : selectedScan?.status === 'root_rot'
-                          ? 'error'
-                          : 'warning'
-                  }
-                  variant="outline"
-                  size="small"
-                />
-                <Badge
-                  label={selectedScan?.urgency || 'Routine Care'}
-                  type={
-                    selectedScan?.status === 'root_rot'
-                      ? 'error'
-                      : selectedScan?.status &&
-                          selectedScan?.status !== 'healthy' &&
-                          selectedScan?.status !== 'ready' &&
-                          selectedScan?.status !== 'harvested'
-                        ? 'warning'
-                        : 'info'
-                  }
-                  variant="outline"
-                  size="small"
-                />
-              </View>
-
-              <View style={styles.metricRow}>
-                <View style={[styles.metricCard, { borderColor: palette.surface.border }]}> 
-                  <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Confidence</Text>
-                  <Text style={[styles.metricValue, { color: palette.primary.solid }]}> 
-                    {typeof selectedScan?.confidenceLevel === 'number' ? `${selectedScan.confidenceLevel}%` : 'N/A'}
+                <ElevatedCard style={styles.detailBlock}>
+                  <Text style={[styles.detailName, { color: palette.text.primary }]}>{selectedScan?.plantName || 'Aloe Vera Plant'}</Text>
+                  <Text style={[styles.detailMeta, { color: palette.text.secondary }]}>
+                    {selectedScan?.date || '-'}{selectedScan?.time ? ` - ${selectedScan.time}` : ''}
                   </Text>
-                </View>
-                <View style={[styles.metricCard, { borderColor: palette.surface.border }]}> 
-                  <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Maturity</Text>
-                  <Text style={[styles.metricValue, { color: palette.text.primary }]}>{selectedScan?.maturity || 'N/A'}</Text>
-                </View>
-              </View>
-
-              <Divider margin={spacing.sm} />
-
-              <Text style={[styles.detailLabel, { color: palette.text.secondary }]}>Detected Summary</Text>
-              <Text style={[styles.detailValue, { color: palette.text.primary }]}>
-                {selectedScan?.detectedSummary || 'No summary available'}
-              </Text>
-
-              <Text style={[styles.detailLabel, { color: palette.text.secondary }]}>Detected Conditions</Text>
-              {(selectedScan?.diseases || []).length > 0 ? (
-                <View style={styles.chipWrap}>
-                  {selectedScan.diseases.map((disease, idx) => (
-                    <Chip
-                      key={`${disease}-${idx}`}
-                      label={disease}
-                      color="warning"
+                  {selectedScan?.plantLabel ? (
+                    <Text style={[styles.detailMeta, { color: palette.text.tertiary }]}>
+                      {selectedScan.plantLabel}
+                    </Text>
+                  ) : null}
+                  <View style={styles.badgeRow}>
+                    <Badge
+                      label={
+                        selectedScan?.status === 'ready'
+                          ? 'Harvest Ready'
+                          : selectedScan?.status === 'harvested'
+                            ? 'Harvested'
+                            : toTitle(selectedScan?.status || 'healthy')
+                      }
+                      type={
+                        selectedScan?.status === 'healthy'
+                          ? 'success'
+                          : selectedScan?.status === 'ready' || selectedScan?.status === 'harvested'
+                            ? 'info'
+                            : selectedScan?.status === 'root_rot'
+                              ? 'error'
+                              : 'warning'
+                      }
+                      variant="outline"
                       size="small"
-                      selected
-                      onPress={() => {}}
                     />
-                  ))}
-                </View>
-              ) : (
-                <Text style={[styles.detailValue, { color: palette.text.secondary }]}>No disease detected.</Text>
-              )}
+                    <Badge
+                      label={selectedScan?.urgency || 'Routine Care'}
+                      type={
+                        selectedScan?.status === 'root_rot'
+                          ? 'error'
+                          : selectedScan?.status &&
+                              selectedScan?.status !== 'healthy' &&
+                              selectedScan?.status !== 'ready' &&
+                              selectedScan?.status !== 'harvested'
+                            ? 'warning'
+                            : 'info'
+                      }
+                      variant="outline"
+                      size="small"
+                    />
+                  </View>
+                </ElevatedCard>
 
-              <Text style={[styles.detailLabel, { color: palette.text.secondary }]}>Recommendations</Text>
-              {recommendationItems.length > 0 ? (
-                <View style={styles.recoWrap}>
-                  {recommendationItems.map((item, idx) => (
-                    <View key={`rec-${idx}`} style={styles.recoRow}>
-                      <Ionicons name="checkmark-circle" size={14} color={palette.status.success} />
-                      <Text style={[styles.recoText, { color: palette.text.primary }]}>{item}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={[styles.detailValue, { color: palette.text.secondary }]}>No recommendation available.</Text>
-              )}
+                <Divider margin={spacing.sm} />
 
-              <EnhancedButton
-                label="Delete Scan History"
-                type="danger"
-                icon="trash-outline"
-                onPress={handleDeleteSelectedScan}
-                style={styles.deleteButton}
-                fullWidth
-              />
-              {selectedScan?.status === 'ready' ? (
-                <EnhancedButton
-                  label="Mark as Harvested"
-                  type="primary"
-                  icon="checkmark-done-outline"
-                  onPress={handleMarkHarvested}
-                  style={styles.markHarvestedButton}
-                  fullWidth
-                />
-              ) : null}
-            </View>
-          </ScrollView>
+                <ElevatedCard style={styles.detailBlock}>
+                  <TouchableOpacity style={styles.sectionHead} onPress={() => toggleSection('overview')}>
+                    <Text style={[styles.sectionHeadTitle, { color: palette.text.primary }]}>Scan Overview</Text>
+                    <Ionicons
+                      name={expandedSections.overview ? 'chevron-up-outline' : 'chevron-down-outline'}
+                      size={18}
+                      color={palette.text.secondary}
+                    />
+                  </TouchableOpacity>
+                  {expandedSections.overview ? (
+                    <>
+                      <View style={styles.kvGrid}>
+                        <View style={[styles.kvCell, { borderColor: palette.surface.border }]}>
+                          <Text style={[styles.kvKey, { color: palette.text.secondary }]}>Confidence</Text>
+                          <Text style={[styles.kvValue, { color: palette.primary.solid }]}>
+                            {typeof selectedScan?.confidenceLevel === 'number' ? `${selectedScan.confidenceLevel}%` : 'N/A'}
+                          </Text>
+                        </View>
+                        <View style={[styles.kvCell, { borderColor: palette.surface.border }]}>
+                          <Text style={[styles.kvKey, { color: palette.text.secondary }]}>Maturity</Text>
+                          <Text style={[styles.kvValue, { color: palette.text.primary }]}>{selectedScan?.maturity || 'N/A'}</Text>
+                        </View>
+                        <View style={[styles.kvCell, { borderColor: palette.surface.border }]}>
+                          <Text style={[styles.kvKey, { color: palette.text.secondary }]}>Status</Text>
+                          <Text style={[styles.kvValue, { color: palette.text.primary }]}>{toTitle(selectedScan?.status || 'healthy')}</Text>
+                        </View>
+                        <View style={[styles.kvCell, { borderColor: palette.surface.border }]}>
+                          <Text style={[styles.kvKey, { color: palette.text.secondary }]}>Urgency</Text>
+                          <Text style={[styles.kvValue, { color: palette.text.primary }]}>{selectedScan?.urgency || 'Routine Care'}</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.detailLabel, { color: palette.text.secondary }]}>Detected Summary</Text>
+                      <Text style={[styles.detailValue, { color: palette.text.primary }]}>
+                        {selectedScan?.detectedSummary || 'No summary available'}
+                      </Text>
+                    </>
+                  ) : null}
+                </ElevatedCard>
+
+                <Divider margin={spacing.sm} />
+
+                <ElevatedCard style={styles.detailBlock}>
+                  <TouchableOpacity style={styles.sectionHead} onPress={() => toggleSection('conditions')}>
+                    <Text style={[styles.sectionHeadTitle, { color: palette.text.primary }]}>Conditions</Text>
+                    <Ionicons
+                      name={expandedSections.conditions ? 'chevron-up-outline' : 'chevron-down-outline'}
+                      size={18}
+                      color={palette.text.secondary}
+                    />
+                  </TouchableOpacity>
+                  {expandedSections.conditions ? (
+                    (selectedScan?.diseases || []).length > 0 ? (
+                      <View style={styles.chipWrap}>
+                        {selectedScan.diseases.map((disease, idx) => (
+                          <Chip
+                            key={`${disease}-${idx}`}
+                            label={disease}
+                            color="warning"
+                            size="small"
+                            selected
+                            onPress={() => {}}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={[styles.detailValue, { color: palette.text.secondary }]}>No disease detected.</Text>
+                    )
+                  ) : null}
+                </ElevatedCard>
+
+                <Divider margin={spacing.sm} />
+
+                <ElevatedCard style={styles.detailBlock}>
+                  <TouchableOpacity style={styles.sectionHead} onPress={() => toggleSection('actions')}>
+                    <Text style={[styles.sectionHeadTitle, { color: palette.text.primary }]}>Post-Scan Actions</Text>
+                    <Ionicons
+                      name={expandedSections.actions ? 'chevron-up-outline' : 'chevron-down-outline'}
+                      size={18}
+                      color={palette.text.secondary}
+                    />
+                  </TouchableOpacity>
+                  {expandedSections.actions ? (
+                    <>
+                      <Text style={[styles.detailValue, { color: palette.text.secondary }]}>
+                        Continue disease care in the dedicated Disease Nursery page.
+                      </Text>
+                      <EnhancedButton
+                        label="Open Disease Nursery"
+                        type="primary"
+                        icon="leaf-outline"
+                        onPress={openDiseaseNursery}
+                        style={styles.nurseryButton}
+                        fullWidth
+                      />
+                      <EnhancedButton
+                        label="Delete Scan History"
+                        type="danger"
+                        icon="trash-outline"
+                        onPress={handleDeleteSelectedScan}
+                        style={styles.deleteButton}
+                        fullWidth
+                      />
+                      {selectedScan?.status === 'ready' ? (
+                        <EnhancedButton
+                          label="Mark as Harvested"
+                          type="primary"
+                          icon="checkmark-done-outline"
+                          onPress={handleMarkHarvested}
+                          style={styles.markHarvestedButton}
+                          fullWidth
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
+                </ElevatedCard>
+              </View>
+            </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -368,7 +450,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginHorizontal: -spacing.screenPadding,
-    minHeight: 152,
+    minHeight: 170,
     paddingHorizontal: spacing.screenPadding,
     paddingBottom: spacing.md,
     justifyContent: 'flex-end',
@@ -386,6 +468,11 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     ...typography.body,
     marginTop: spacing.xxs,
+  },
+  headerMeta: {
+    ...typography.caption,
+    marginTop: spacing.xxs,
+    fontWeight: '700',
   },
   filterTabs: {
     marginBottom: spacing.md,
@@ -446,21 +533,33 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.32)',
   },
   modalScroll: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.screenPadding,
     paddingVertical: spacing.lg,
   },
-  modalCard: {
-    width: '100%',
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: spacing.md,
+  modalContentScroll: {
+    paddingBottom: spacing.lg,
   },
-  modalHeader: {
+  modalStickyHeader: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomWidth: 0,
+    paddingHorizontal: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  modalCard: {
+    width: '100%',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    padding: spacing.md,
+    gap: spacing.xs,
   },
   modalTitle: {
     ...typography.bodyBold,
@@ -473,7 +572,7 @@ const styles = StyleSheet.create({
   },
   detailName: {
     ...typography.title,
-    marginTop: spacing.sm,
+    marginTop: spacing.xxs,
   },
   detailMeta: {
     ...typography.caption,
@@ -518,19 +617,39 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.xs,
   },
-  recoWrap: {
-    marginTop: spacing.xs,
-    gap: spacing.xs,
+  detailBlock: {
+    padding: spacing.sm,
   },
-  recoRow: {
+  sectionHead: {
+    minHeight: 36,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionHeadTitle: {
+    ...typography.bodyBold,
+  },
+  kvGrid: {
+    marginTop: spacing.xs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
   },
-  recoText: {
-    ...typography.body,
-    flex: 1,
-    lineHeight: 20,
+  kvCell: {
+    width: '48%',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: spacing.xs,
+  },
+  kvKey: {
+    ...typography.caption,
+  },
+  kvValue: {
+    ...typography.bodyBold,
+    marginTop: 2,
+  },
+  nurseryButton: {
+    marginTop: spacing.sm,
   },
   deleteButton: {
     marginTop: spacing.md,

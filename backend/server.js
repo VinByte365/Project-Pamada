@@ -9,6 +9,7 @@ const requestContext = require('./middlewares/requestContext');
 const notFound = require('./middlewares/notFound');
 const chatbotRoutes = require('./routes/chatbot');
 const { initSocket } = require('./socket');
+const { seedPresetRecommendations } = require('./seeders/presetRecommendationSeeder');
 const dotenv = require('dotenv');
 dotenv.config({ path: './config/.env' });
 
@@ -18,6 +19,11 @@ const server = http.createServer(app);
 
 // Connect to database
 connectToDatabase();
+if (String(process.env.AUTO_SEED_PRESET_RECOMMENDATIONS || 'false').toLowerCase() === 'true') {
+  seedPresetRecommendations()
+    .then(() => console.log('Preset recommendations seeded.'))
+    .catch((error) => console.error('Preset recommendation seed failed:', error.message));
+}
 // Middleware
 app.use(cors({
   origin: process.env.CORS_ORIGIN?.split(',') || '*',

@@ -575,6 +575,16 @@ export default function CommunityScreen() {
               <Text style={[styles.feedMeta, { color: palette.text.tertiary }]}>
                 {posts.length} posts in feed
               </Text>
+              <View style={styles.feedBadgeRow}>
+                <View style={[styles.feedBadge, { backgroundColor: `${palette.primary.solid}14` }]}>
+                  <Ionicons name="people-outline" size={12} color={palette.primary.solid} />
+                  <Text style={[styles.feedBadgeText, { color: palette.primary.solid }]}>Grower Network</Text>
+                </View>
+                <View style={[styles.feedBadge, { backgroundColor: `${palette.status.success}14` }]}>
+                  <Ionicons name="leaf-outline" size={12} color={palette.status.success} />
+                  <Text style={[styles.feedBadgeText, { color: palette.status.success }]}>Aloe Tips</Text>
+                </View>
+              </View>
             </View>
             <TouchableOpacity
               style={[
@@ -1604,7 +1614,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     marginHorizontal: -spacing.screenPadding,
     padding: spacing.md,
-    minHeight: 180,
+    minHeight: 198,
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
@@ -1630,8 +1640,26 @@ const styles = StyleSheet.create({
   },
   feedMeta: {
     ...typography.caption,
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontWeight: "600",
+  },
+  feedBadgeRow: {
+    marginTop: spacing.xs,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  feedBadge: {
+    minHeight: 24,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  feedBadgeText: {
+    ...typography.caption,
+    fontWeight: "700",
   },
   createPostBtn: {
     minHeight: 42,

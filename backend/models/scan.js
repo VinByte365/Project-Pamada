@@ -22,6 +22,20 @@ const scanSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  disease_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Disease',
+    index: true
+  },
+  plant_scan_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PlantScan',
+    index: true
+  },
+  disease_key: {
+    type: String,
+    index: true
+  },
   image_data: {
     original_url: {
       type: String,

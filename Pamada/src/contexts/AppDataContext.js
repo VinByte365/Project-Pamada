@@ -356,12 +356,24 @@ export function AppDataProvider({ children }) {
     });
 
     const payload = response?.data || {};
+    const structuredPayload = payload.recommendation_payload || {
+      disease: payload.disease || '',
+      confidence: payload.confidence ?? 0,
+      severity: payload.severity || 'medium',
+      recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
+    };
+    if (!structuredPayload?.disease || !Array.isArray(structuredPayload.recommendations)) {
+      throw new Error('Scan result is missing preset recommendation payload.');
+    }
     return {
       preview_id: payload.preview_id || '',
       image_data: payload.image_data || {},
       yolo_predictions: payload.yolo_predictions || [],
       analysis_result: payload.analysis_result || {},
-      recommendations: payload.recommendations || payload.analysis_result?.recommendations || {},
+      recommendation_payload: structuredPayload,
+      disease_key: payload.disease_key || '',
+      confidence: payload.confidence ?? null,
+      severity: payload.severity || '',
       processing_time_ms: payload.processing_time_ms || 0,
     };
   };
@@ -380,11 +392,44 @@ export function AppDataProvider({ children }) {
     });
 
     const scan = response?.data?.scan;
+    const recommendationPayload = response?.data?.recommendation_payload || null;
     if (scan) {
       upsertScan(scan);
       refreshSummary().catch(() => {});
     }
-    return scan;
+    return { ...scan, recommendation_payload: recommendationPayload };
+  };
+
+  const fetchScanRecommendations = async (scanId) => {
+    if (!token) return null;
+    const response = await apiRequest(`/api/v1/scans/${scanId}/recommendations`, {
+      method: 'GET',
+      token,
+    });
+    return response?.data || null;
+  };
+
+  const setScanRecommendationCompletion = async ({ scanId, recommendationId, completed = true }) => {
+    if (!token) {
+      throw new Error('You must be logged in to update recommendations.');
+    }
+    const response = await apiRequest(`/api/v1/scans/${scanId}/recommendations/${recommendationId}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ completed }),
+    });
+    return {
+      recommendation_log: response?.data?.recommendation_log || null,
+      care_plan: response?.data?.care_plan || null,
+    };
+  };
+
+  const fetchDiseaseCatalog = async () => {
+    const response = await apiRequest('/api/v1/diseases?limit=100', {
+      method: 'GET',
+      token,
+    });
+    return response?.data?.diseases || [];
   };
 
   const fetchScanById = async (scanId) => {
@@ -461,6 +506,9 @@ export function AppDataProvider({ children }) {
       analyzeScanPreview,
       confirmScanPreview,
       fetchScanById,
+      fetchScanRecommendations,
+      setScanRecommendationCompletion,
+      fetchDiseaseCatalog,
       deleteScan,
       markPlantHarvested,
     }),

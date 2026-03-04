@@ -136,6 +136,16 @@ export default function ChatbotScreen() {
             <Text style={styles.headerTitle}>Pamada Chatbot</Text>
           </View>
           <Text style={styles.headerSubtitle}>Ask about Aloe Vera care, disease, and harvest timing.</Text>
+          <View style={styles.headerMetaRow}>
+            <View style={styles.headerMetaPill}>
+              <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
+              <Text style={styles.headerMetaText}>AI Care Assistant</Text>
+            </View>
+            <View style={styles.headerMetaPill}>
+              <Ionicons name="refresh-outline" size={12} color={colors.primary} />
+              <Text style={styles.headerMetaText}>Pull to reset chat</Text>
+            </View>
+          </View>
         </View>
 
         <ScrollView
@@ -224,7 +234,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.surface,
-    minHeight: 150,
+    minHeight: 178,
     paddingHorizontal: spacing.screenPadding,
     paddingBottom: spacing.md,
     justifyContent: 'flex-end',
@@ -245,7 +255,28 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     ...typography.body,
     color: colors.text.secondary,
-    marginTop: spacing.xxs,
+    marginTop: spacing.xs,
+    fontWeight: '600',
+  },
+  headerMetaRow: {
+    marginTop: spacing.xs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  headerMetaPill: {
+    minHeight: 24,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
+    backgroundColor: `${colors.primary}14`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerMetaText: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
   },
   messages: {
     paddingHorizontal: spacing.screenPadding,

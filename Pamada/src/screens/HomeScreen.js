@@ -221,6 +221,7 @@ export default function HomeScreen() {
               imageStyle={styles.heroImage}
               blurRadius={3}
             >
+              <View style={styles.heroScrim} />
               <View style={[styles.heroOverlay, { paddingTop: Math.max(spacing.xl, insets.top + spacing.md) }]}>
                 <View style={[styles.heroTopRow, { top: Math.max(spacing.sm, insets.top) }]}>
                   <View style={styles.heroTopActions}>
@@ -242,8 +243,22 @@ export default function HomeScreen() {
                     Good morning, {displayName}
                   </Text>
                   <Text style={[styles.subtitle, { color: palette.text.secondary }]} numberOfLines={2}>
-                    Daily care summary and smart priorities
+                    Monitor health trends, manage risk, and plan harvest timing
                   </Text>
+                  <View style={styles.heroMetaRow}>
+                    <View style={[styles.heroMetaPill, { backgroundColor: `${palette.surface.light}CC` }]}>
+                      <Ionicons name="analytics-outline" size={12} color={palette.primary.solid} />
+                      <Text style={[styles.heroMetaText, { color: palette.text.primary }]}>
+                        {snapshotInsights.highRiskCount} Priority Cases
+                      </Text>
+                    </View>
+                    <View style={[styles.heroMetaPill, { backgroundColor: `${palette.surface.light}CC` }]}>
+                      <Ionicons name="leaf-outline" size={12} color={palette.status.success} />
+                      <Text style={[styles.heroMetaText, { color: palette.text.primary }]}>
+                        {snapshotInsights.readyCount} Harvest Ready
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             </ImageBackground>
@@ -536,6 +551,10 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     opacity: 0.8,
   },
+  heroScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(12, 20, 16, 0.34)',
+  },
   heroOverlay: {
     padding: spacing.md,
     minHeight: 248,
@@ -583,9 +602,27 @@ const styles = StyleSheet.create({
     ...typography.body,
     marginTop: spacing.xs,
     fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  heroMetaRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  heroMetaPill: {
+    minHeight: 26,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroMetaText: {
+    ...typography.caption,
+    fontWeight: '700',
   },
   sectionHeader: {
     flexDirection: 'row',
