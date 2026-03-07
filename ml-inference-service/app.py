@@ -178,6 +178,6 @@ def predict_batch():
         return jsonify({'success': False, 'error': str(exc)}), 500
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', '5001'))
+    port = int(os.getenv('PORT', '7860'))
     debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)

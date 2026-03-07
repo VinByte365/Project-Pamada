@@ -19,7 +19,7 @@ class YOLOService:
 
     def _resolve_model_path(self, model_path):
         if model_path is None:
-            model_path = os.getenv('MODEL_PATH', 'models/AV3.pt')
+            model_path = os.getenv('MODEL_PATH', 'models/AV5.pt')
 
         path = Path(model_path)
         if path.is_absolute():

@@ -1,3 +1,12 @@
+---
+title: Flask Microservice
+emoji: 🐍
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860  # Must match your Flask app port
+---
+
 # Aloe Vera ML Inference Service
 
 ## What it does
