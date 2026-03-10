@@ -1,9 +1,16 @@
 const Scan = require('../models/scan');
+const Plant = require('../models/plant');
+const { normalizePrimaryCondition, normalizeDiseaseSeverity } = require('../utils/plantStatusNormalizer');
 const mlService = require('./mlService');
 const {
   createPlantScanWithRecommendations,
   getStructuredRecommendationsByPlantScanId,
 } = require('./presetRecommendationService');
+
+function isHarvestReadyFromStage(stage) {
+  const value = String(stage || '').toLowerCase();
+  return value.includes('ready for harvest') || value.includes('mature');
+}
 
 function resolveDiseaseKey(mlResults = {}) {
   const rawDiseaseKey = String(
@@ -96,6 +103,25 @@ async function processScanAnalysis(scanId, imageBuffer) {
     }
 
     await scan.save();
+
+    const plant = await Plant.findById(scan.plant_id);
+    if (plant && analysisResult) {
+      const nextHarvestReady = isHarvestReadyFromStage(analysisResult?.maturity_stage)
+        || Boolean(analysisResult?.harvest_ready);
+      plant.current_status.harvest_ready = nextHarvestReady;
+      plant.current_status.lifecycle_stage = nextHarvestReady ? 'ready' : 'growing';
+      plant.current_status.health_score = analysisResult.health_score || plant.current_status.health_score;
+      plant.current_status.primary_condition = normalizePrimaryCondition(
+        scan.yolo_predictions[0]?.class,
+        normalizePrimaryCondition(plant.current_status.primary_condition, 'healthy')
+      );
+      plant.current_status.disease_severity = normalizeDiseaseSeverity(
+        analysisResult.disease_severity,
+        normalizeDiseaseSeverity(plant.current_status.disease_severity, 'none')
+      );
+      plant.current_status.estimated_days_to_harvest = analysisResult.estimated_days_to_harvest;
+      await plant.save();
+    }
 
     return scan;
   } catch (error) {

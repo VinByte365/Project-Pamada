@@ -179,8 +179,7 @@ class MLService {
     )
       .trim()
       .toLowerCase();
-    const stageText = String(maturity_data?.maturity_stage || '');
-    const stageLower = stageText.toLowerCase();
+    const stageLower = maturity_data?.maturity_stage?.toLowerCase() || '';
     const noPlantDetected = stageLower.includes('no plant detected');
 
     if (noPlantDetected) {
@@ -242,18 +241,17 @@ class MLService {
     // Determine harvest readiness
     const maturityAssessment = this.mapMaturityAssessment(maturity_data?.maturity_stage, age_estimation?.maturity_assessment);
     const estimatedDays = this.mapEstimatedDaysToHarvest(maturity_data?.maturity_stage, age_estimation?.estimated_days_to_harvest);
-    const harvestReady = maturityAssessment === 'optimal' &&
-                         diseaseSeverity === 'none' &&
-                         healthScore >= 80;
+    const stageText = String(maturity_data?.maturity_stage || '').toLowerCase();
+    const harvestReady = stageText.includes('ready for harvest') || stageText.includes('mature');
 
     // Determine recommended action
     let recommendedAction = 'monitor_daily';
-    if (harvestReady) {
-      recommendedAction = 'harvest_now';
-    } else if (maturityAssessment === 'maturing' && diseaseSeverity === 'none') {
-      recommendedAction = 'wait_2_weeks';
-    } else if (diseaseSeverity !== 'none') {
+    if (diseaseSeverity !== 'none') {
       recommendedAction = 'treat_disease';
+    } else if (harvestReady) {
+      recommendedAction = 'harvest_now';
+    } else if (maturityAssessment === 'maturing') {
+      recommendedAction = 'wait_2_weeks';
     }
 
     // Generate recommendations

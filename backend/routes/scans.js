@@ -13,6 +13,7 @@ const {
   verifyAloeDebug,
   getScanRecommendations,
   updateScanRecommendationCompletion,
+  markScanHarvested,
 } = require('../controllers/scanController');
 const { protect } = require('../middlewares/auth');
 const upload = require('../middlewares/upload');
@@ -34,6 +35,7 @@ router.post('/confirm-preview', scanLimiter, confirmPreview);
 router.post('/verify-aloe-debug', scanLimiter, upload.single('image'), verifyAloeDebug);
 router.get('/:id/recommendations', getScanRecommendations);
 router.patch('/:id/recommendations/:recommendationId', updateScanRecommendationCompletion);
+router.patch('/:id/harvested', markScanHarvested);
 
 router.route('/plant/:plantId')
   .get(getScansByPlant);

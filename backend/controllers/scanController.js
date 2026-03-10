@@ -19,6 +19,11 @@ const {
   normalizeDiseaseSeverity,
 } = require('../utils/plantStatusNormalizer');
 
+function isHarvestReadyFromStage(stage) {
+  const value = String(stage || '').toLowerCase();
+  return value.includes('ready for harvest') || value.includes('mature');
+}
+
 const PREVIEW_TTL_MS = Number(process.env.SCAN_PREVIEW_TTL_MS || 10 * 60 * 1000);
 const previewStore = new Map();
 
@@ -371,7 +376,13 @@ exports.createScan = asyncHandler(async (req, res) => {
   // Update plant's last scan date without validating unrelated legacy status values.
   await Plant.updateOne(
     { _id: plant._id, owner_id: req.user.id },
-    { $set: { 'current_status.last_scan_date': new Date() } }
+    {
+      $set: {
+        'current_status.last_scan_date': new Date(),
+        'current_status.harvest_ready': false,
+        'current_status.lifecycle_stage': 'growing',
+      },
+    }
   );
 
   if (syncProcessing) {
@@ -643,6 +654,30 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
     scan.plant_scan_id = linked.plantScan._id;
     scan.disease_id = linked.plantScan.disease_id;
     await scan.save();
+  }
+
+  if (preview.analysis_result) {
+    const nextHarvestReady = isHarvestReadyFromStage(preview.analysis_result?.maturity_stage)
+      || Boolean(preview.analysis_result.harvest_ready);
+    await Plant.updateOne(
+      { _id: plant._id },
+      {
+        $set: {
+          'current_status.harvest_ready': nextHarvestReady,
+          'current_status.lifecycle_stage': nextHarvestReady ? 'ready' : 'growing',
+          'current_status.health_score': preview.analysis_result.health_score || plant.current_status.health_score,
+          'current_status.primary_condition': normalizePrimaryCondition(
+            preview.yolo_predictions?.[0]?.class,
+            normalizePrimaryCondition(plant.current_status.primary_condition, 'healthy')
+          ),
+          'current_status.disease_severity': normalizeDiseaseSeverity(
+            preview.analysis_result.disease_severity,
+            normalizeDiseaseSeverity(plant.current_status.disease_severity, 'none')
+          ),
+          'current_status.estimated_days_to_harvest': preview.analysis_result.estimated_days_to_harvest,
+        },
+      }
+    );
   }
 
   await Plant.updateOne(
@@ -925,6 +960,34 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Mark scan as harvested
+// @route   PATCH /api/v1/scans/:id/harvested
+// @access  Private
+exports.markScanHarvested = asyncHandler(async (req, res) => {
+  const scan = await Scan.findOne({
+    _id: req.params.id,
+    user_id: req.user.id
+  });
+
+  if (!scan) {
+    return res.status(404).json({
+      success: false,
+      error: 'Scan not found'
+    });
+  }
+
+  scan.harvested_at = new Date();
+  await scan.save();
+
+  res.status(200).json({
+    success: true,
+    data: {
+      scan
+    },
+    message: 'Scan marked as harvested'
+  });
+});
+
 // @desc    Update scan (for ML results)
 // @route   PUT /api/v1/scans/:id
 // @access  Private
@@ -969,13 +1032,10 @@ exports.updateScan = asyncHandler(async (req, res) => {
     const plant = await Plant.findById(scan.plant_id._id);
     if (plant) {
       plant.current_status.health_score = scan.analysis_result.health_score || plant.current_status.health_score;
-      const nextHarvestReady = Boolean(scan.analysis_result.harvest_ready);
-      if (plant.current_status.lifecycle_stage !== 'harvested') {
-        plant.current_status.harvest_ready = nextHarvestReady;
-        plant.current_status.lifecycle_stage = nextHarvestReady ? 'ready' : 'growing';
-      } else {
-        plant.current_status.harvest_ready = false;
-      }
+      const nextHarvestReady = isHarvestReadyFromStage(scan.analysis_result?.maturity_stage)
+        || Boolean(scan.analysis_result.harvest_ready);
+      plant.current_status.harvest_ready = nextHarvestReady;
+      plant.current_status.lifecycle_stage = nextHarvestReady ? 'ready' : 'growing';
       plant.current_status.primary_condition = normalizePrimaryCondition(
         scan.yolo_predictions[0]?.class,
         normalizePrimaryCondition(plant.current_status.primary_condition, 'healthy')

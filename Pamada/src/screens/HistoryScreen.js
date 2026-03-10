@@ -152,7 +152,10 @@ export default function HistoryScreen() {
         text: 'Confirm',
         onPress: async () => {
           try {
-            await markPlantHarvested(selectedScan.plantMongoId);
+            await markPlantHarvested({
+              plantMongoId: selectedScan.plantMongoId,
+              scanId: selectedScan.mongoId || selectedScan.id,
+            });
             setSelectedScan((prev) => (prev ? { ...prev, status: 'harvested', urgency: 'Harvested' } : prev));
             showSnackbar({ type: 'success', message: 'Plant marked as harvested.' });
           } catch (error) {
@@ -391,17 +394,21 @@ export default function HistoryScreen() {
                   </TouchableOpacity>
                   {expandedSections.actions ? (
                     <>
-                      <Text style={[styles.detailValue, { color: palette.text.secondary }]}>
-                        Continue disease care in the dedicated Disease Nursery page.
-                      </Text>
-                      <EnhancedButton
-                        label="Open Disease Nursery"
-                        type="primary"
-                        icon="leaf-outline"
-                        onPress={openDiseaseNursery}
-                        style={styles.nurseryButton}
-                        fullWidth
-                      />
+                      {selectedScan?.status !== 'harvested' ? (
+                        <>
+                          <Text style={[styles.detailValue, { color: palette.text.secondary }]}>
+                            Continue disease care in the dedicated Disease Nursery page.
+                          </Text>
+                          <EnhancedButton
+                            label="Open Disease Nursery"
+                            type="primary"
+                            icon="leaf-outline"
+                            onPress={openDiseaseNursery}
+                            style={styles.nurseryButton}
+                            fullWidth
+                          />
+                        </>
+                      ) : null}
                       <EnhancedButton
                         label="Delete Scan History"
                         type="danger"

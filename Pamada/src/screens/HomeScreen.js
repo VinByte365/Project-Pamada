@@ -152,7 +152,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { palette } = useAppTheme();
   const { user, token } = useAuth();
-  const { recentScans, stats, dailyTip, refreshAll } = useAppData();
+  const { scans, recentScans, stats, dailyTip, refreshAll } = useAppData();
   const [segment, setSegment] = useState('today');
   const [nearbyFarms, setNearbyFarms] = useState([]);
   const [farmsLoading, setFarmsLoading] = useState(true);
@@ -195,18 +195,27 @@ export default function HomeScreen() {
   }, [stats]);
 
   const snapshotInsights = useMemo(() => {
-    const risky = recentScans.filter(
+    const source = Array.isArray(scans) && scans.length ? scans : recentScans;
+    const latestByPlant = new Map();
+    source.forEach((item) => {
+      const key = item.plantMongoId || item.plantLabel || item.id;
+      if (!latestByPlant.has(key)) {
+        latestByPlant.set(key, item);
+      }
+    });
+    const plantSnapshots = Array.from(latestByPlant.values());
+    const risky = plantSnapshots.filter(
       (item) => item.status && item.status !== 'healthy' && item.status !== 'ready' && item.status !== 'harvested'
     );
-    const ready = recentScans.filter((item) => item.status === 'ready');
-    const latest = recentScans[0];
+    const ready = plantSnapshots.filter((item) => item.status === 'ready');
+    const latest = plantSnapshots[0];
     return {
       highRiskCount: risky.length,
       readyCount: ready.length,
       latestSummary: latest?.detectedSummary || 'No recent scan insights yet',
       latestLabel: latest?.plantName || 'Scan pending',
     };
-  }, [recentScans]);
+  }, [recentScans, scans]);
 
   const fetchDashboardAssets = React.useCallback(async () => {
     setFarmsLoading(true);

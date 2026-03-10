@@ -309,7 +309,7 @@ exports.getSummary = asyncHandler(async (req, res) => {
   const recentScans = await Scan.find({ user_id: req.user.id })
     .sort({ createdAt: -1 })
     .limit(5)
-    .populate('plant_id', 'plant_id location');
+    .populate('plant_id', 'plant_id location current_status');
 
   res.status(200).json({
     success: true,

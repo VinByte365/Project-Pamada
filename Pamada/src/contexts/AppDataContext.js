@@ -74,13 +74,12 @@ export function AppDataProvider({ children }) {
     const maturity = formatMaturityReadiness(scan);
     const primaryClass = scan?.yolo_predictions?.[0]?.class
       || (scan?.analysis_result?.disease_detected ? 'leaf_spot' : 'healthy');
-    const lifecycleStage = String(scan?.plant_id?.current_status?.lifecycle_stage || '').toLowerCase();
     const isHarvestReady = maturity === 'Ready for Harvest' || scan?.analysis_result?.harvest_ready === true;
-    const status = lifecycleStage === 'harvested'
-      ? 'harvested'
-      : noPlantDetected
-        ? 'leaf_spot'
-        : (isHarvestReady ? 'ready' : primaryClass);
+    const statusWithoutHarvested = noPlantDetected
+      ? 'leaf_spot'
+      : (isHarvestReady ? 'ready' : primaryClass);
+    const isHarvested = Boolean(scan?.harvested_at);
+    const status = isHarvested ? 'harvested' : statusWithoutHarvested;
     const resolvedScanNumber = Number(scan?.scan_number || fallbackScanNumber || previous?.scanNumber || 0) || null;
     const basePlantName = scan?.plant_id?.plant_id
       ? `${scan.plant_id.plant_id}${scan.plant_id.location?.plot_number ? ` - Plot ${scan.plant_id.location.plot_number}` : ''}`
@@ -115,6 +114,7 @@ export function AppDataProvider({ children }) {
       date: createdAt.toISOString().slice(0, 10),
       time: createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       status,
+      statusWithoutHarvested,
       maturity,
       image: scan?.image_data?.thumbnail_url || scan?.image_data?.original_url,
       diseases: uniqueDiseases,
@@ -248,13 +248,12 @@ export function AppDataProvider({ children }) {
       const id = entry?._id || entry?.scan_id;
       if (id) fallbackNumberMap.set(id, index + 1);
     });
-    setScans(
-      list.map((entry) => {
-        const id = entry?._id || entry?.scan_id;
-        const fallbackNumber = fallbackNumberMap.get(id);
-        return normalizeScan(entry, fallbackNumber);
-      })
-    );
+    const normalizedList = list.map((entry) => {
+      const id = entry?._id || entry?.scan_id;
+      const fallbackNumber = fallbackNumberMap.get(id);
+      return normalizeScan(entry, fallbackNumber);
+    });
+    setScans(normalizedList);
   };
 
   const refreshAnalytics = async () => {
@@ -457,27 +456,41 @@ export function AppDataProvider({ children }) {
     refreshAnalytics().catch(() => {});
   };
 
-  const markPlantHarvested = async (plantMongoId) => {
+  const markPlantHarvested = async ({ plantMongoId, scanId }) => {
     if (!token || !plantMongoId) {
       throw new Error('Missing plant id');
     }
 
-    await apiRequest(`/api/v1/plants/${plantMongoId}/harvested`, {
-      method: 'PUT',
-      token,
-    });
+    await Promise.all([
+      apiRequest(`/api/v1/plants/${plantMongoId}/harvested`, {
+        method: 'PUT',
+        token,
+      }),
+      scanId
+        ? apiRequest(`/api/v1/scans/${scanId}/harvested`, {
+            method: 'PATCH',
+            token,
+          })
+        : Promise.resolve(),
+    ]);
 
-    setScans((prev) =>
-      prev.map((scan) =>
-        String(scan.plantMongoId) === String(plantMongoId)
-          ? {
-              ...scan,
-              status: 'harvested',
-              urgency: 'Harvested',
-            }
-          : scan
-      )
-    );
+    if (scanId) {
+      setScans((prev) =>
+        prev.map((scan) =>
+          String(scan.id) === String(scanId) || String(scan.mongoId) === String(scanId)
+            ? {
+                ...scan,
+                status: 'harvested',
+                urgency: 'Harvested',
+                raw: {
+                  ...scan.raw,
+                  harvested_at: new Date().toISOString(),
+                },
+              }
+            : scan
+        )
+      );
+    }
     refreshSummary().catch(() => {});
     refreshAnalytics().catch(() => {});
   };

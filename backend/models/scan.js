@@ -131,6 +131,10 @@ const scanSchema = new mongoose.Schema({
       ref: 'User'
     },
     validation_date: Date
+  },
+  harvested_at: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
