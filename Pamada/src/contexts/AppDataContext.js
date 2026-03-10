@@ -39,6 +39,7 @@ export function AppDataProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
   const [plantId, setPlantId] = useState(null);
+  const [progressMap, setProgressMap] = useState({});
 
   const formatMaturityReadiness = (scan) => {
     const analysis = scan?.analysis_result || {};
@@ -409,6 +410,36 @@ export function AppDataProvider({ children }) {
     return response?.data || null;
   };
 
+  const setScanProgress = (scanId, completionRate) => {
+    if (!scanId) return;
+    setProgressMap((prev) => ({
+      ...prev,
+      [String(scanId)]: typeof completionRate === 'number' ? completionRate : 0,
+    }));
+  };
+
+  const loadScanProgress = async (scanIds = []) => {
+    if (!token || !scanIds.length) return;
+    const results = await Promise.all(
+      scanIds.map(async (scanId) => {
+        try {
+          const response = await fetchScanRecommendations(scanId);
+          const completion = response?.progress?.completion_rate;
+          return { scanId, completion: typeof completion === 'number' ? completion : 0 };
+        } catch (error) {
+          return { scanId, completion: 0 };
+        }
+      })
+    );
+    setProgressMap((prev) => {
+      const next = { ...prev };
+      results.forEach(({ scanId, completion }) => {
+        next[String(scanId)] = completion;
+      });
+      return next;
+    });
+  };
+
   const setScanRecommendationCompletion = async ({ scanId, recommendationId, completed = true }) => {
     if (!token) {
       throw new Error('You must be logged in to update recommendations.');
@@ -511,6 +542,7 @@ export function AppDataProvider({ children }) {
       recentScans: scans.slice(0, 4),
       analytics,
       loading,
+      progressMap,
       dailyTip:
         'Use morning light for scanning. It improves leaf texture contrast and model confidence.',
       refreshAll,
@@ -521,12 +553,14 @@ export function AppDataProvider({ children }) {
       confirmScanPreview,
       fetchScanById,
       fetchScanRecommendations,
+      loadScanProgress,
+      setScanProgress,
       setScanRecommendationCompletion,
       fetchDiseaseCatalog,
       deleteScan,
       markPlantHarvested,
     }),
-    [scans, stats, analytics, loading]
+    [scans, stats, analytics, loading, progressMap]
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

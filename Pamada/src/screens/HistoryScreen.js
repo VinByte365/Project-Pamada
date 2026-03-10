@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import {
   Badge,
   Chip,
@@ -44,6 +44,7 @@ const toTitle = (value = '') =>
 
 export default function HistoryScreen() {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { palette } = useAppTheme();
   const {
@@ -51,6 +52,8 @@ export default function HistoryScreen() {
     refreshScans,
     deleteScan,
     markPlantHarvested,
+    loadScanProgress,
+    progressMap,
   } = useAppData();
   const { showSnackbar } = useSnackbar();
   const [filter, setFilter] = useState('all');
@@ -73,13 +76,29 @@ export default function HistoryScreen() {
         : scans.filter((scan) => scan.status === filter);
     return filtered.map((scan) => {
       const urgency = urgencyOf(scan.status, palette);
+      const scanKey = String(scan.mongoId || scan.id || '');
       return {
         ...scan,
         urgency: urgency.label,
         urgencyColor: urgency.color,
+        taskProgress: scanKey ? progressMap[scanKey] : null,
       };
     });
-  }, [scans, filter, palette]);
+  }, [scans, filter, palette, progressMap]);
+
+  useEffect(() => {
+    if (!data.length) return;
+    const pendingIds = data
+      .map((item) => String(item.mongoId || item.id || ''))
+      .filter((id) => id && progressMap[id] === undefined);
+    if (!pendingIds.length) return;
+    loadScanProgress(pendingIds).catch(() => {});
+  }, [data, loadScanProgress, progressMap]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    refreshScans().catch(() => {});
+  }, [isFocused, refreshScans]);
 
   const openDiseaseNursery = () => {
     if (!selectedScan) return;
@@ -460,7 +479,7 @@ export default function HistoryScreen() {
                   </TouchableOpacity>
                   {expandedSections.actions ? (
                     <>
-                      {selectedScan?.status !== 'harvested' ? (
+                      {selectedScan?.status !== 'harvested' && selectedScan?.status !== 'ready' ? (
                         <>
                           <Text style={[styles.detailValue, { color: palette.text.secondary }]}>
                             Continue disease care in the dedicated Disease Nursery page.

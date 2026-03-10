@@ -23,6 +23,25 @@ export default function PlantPreviewTile({ item, onPress }) {
           </Text>
           <Text style={[styles.meta, { color: palette.text.secondary }]}>{item.date}</Text>
 
+          {typeof item.taskProgress === 'number' && item.status !== 'ready' && item.status !== 'harvested' ? (
+            <View style={styles.progressRow}>
+              <View style={[styles.progressTrack, { backgroundColor: palette.surface.soft }]}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${Math.max(0, Math.min(100, item.taskProgress))}%`,
+                      backgroundColor: palette.primary.solid,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.progressText, { color: palette.text.secondary }]}>
+                {Math.round(item.taskProgress)}%
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.row}>
             <StatusBadge status={item.status} />
             <View style={[styles.urgencyDot, { backgroundColor: item.urgencyColor }]} />
@@ -69,6 +88,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     flexWrap: 'nowrap',
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 999,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  progressText: {
+    ...typography.caption,
+    width: 40,
+    textAlign: 'right',
   },
   meta: {
     ...typography.caption,

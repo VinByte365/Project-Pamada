@@ -5,7 +5,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ElevatedCard from '../components/ui/ElevatedCard';
 import useAppTheme from '../theme/useAppTheme';
-import { radius, spacing, typography } from '../theme';
+import { getTheme, radius, spacing, typography } from '../theme';
 import { useAppData } from '../contexts/AppDataContext';
 import { useSnackbar } from '../contexts/SnackbarContext';
 
@@ -17,12 +17,14 @@ const toTitle = (value = '') =>
 export default function DiseaseNurseryScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { palette } = useAppTheme();
+  const theme = useAppTheme();
+  const palette = theme?.palette || getTheme('light');
   const { showSnackbar } = useSnackbar();
   const {
     fetchScanRecommendations,
     setScanRecommendationCompletion,
     fetchDiseaseCatalog,
+    setScanProgress,
   } = useAppData();
 
   const scanId = route.params?.scanId || '';
@@ -43,11 +45,19 @@ export default function DiseaseNurseryScreen() {
   const currentDiseaseKey = recommendationPayload?.disease_key || '';
 
   const completionRate = useMemo(() => {
+    const apiRate = recommendationPayload?.progress?.completion_rate;
+    if (typeof apiRate === 'number') return apiRate;
     if (carePlanState?.all_completed) return 100;
     if (!scanRecommendations.length) return 0;
     const done = scanRecommendations.filter((row) => row.completed).length;
     return Math.round((done / scanRecommendations.length) * 100);
-  }, [scanRecommendations, carePlanState]);
+  }, [scanRecommendations, carePlanState, recommendationPayload]);
+
+  const completionColor = completionRate >= 80
+    ? palette.status.success
+    : completionRate >= 45
+      ? palette.status.warning
+      : palette.status.info;
 
   const catalogCards = useMemo(() => {
     const normalizedCurrent = String(currentDiseaseName || '').toLowerCase();
@@ -95,6 +105,11 @@ export default function DiseaseNurseryScreen() {
     };
   }, [scanId, fetchScanRecommendations, fetchDiseaseCatalog, showSnackbar]);
 
+  useEffect(() => {
+    if (!scanId) return;
+    setScanProgress(scanId, completionRate);
+  }, [scanId, completionRate, setScanProgress]);
+
   const toggleRecommendation = async (item) => {
     if (!scanId || !item?.id) return;
     const nextCompleted = !Boolean(item.completed);
@@ -136,12 +151,20 @@ export default function DiseaseNurseryScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background.base }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button">
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backBtn, { backgroundColor: palette.surface.soft }]}
+          accessibilityRole="button"
+        >
           <Ionicons name="chevron-back" size={22} color={palette.text.primary} />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
           <Text style={[styles.title, { color: palette.text.primary }]}>Disease Nursery</Text>
           <Text style={[styles.subtitle, { color: palette.text.secondary }]}>{plantName}</Text>
+        </View>
+        <View style={[styles.headerPill, { backgroundColor: `${palette.primary.solid}12` }]}>
+          <Ionicons name="leaf-outline" size={14} color={palette.primary.solid} />
+          <Text style={[styles.headerPillText, { color: palette.primary.solid }]}>Care Hub</Text>
         </View>
       </View>
 
@@ -151,22 +174,42 @@ export default function DiseaseNurseryScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <ElevatedCard style={styles.currentCard}>
-            <Text style={[styles.sectionLabel, { color: palette.text.secondary }]}>Post-Scan Care Plan</Text>
+          <ElevatedCard style={[styles.currentCard, { borderColor: palette.surface.border }]}>
+            <View style={styles.currentHeader}>
+              <View style={[styles.currentBadge, { backgroundColor: `${palette.primary.solid}12` }]}>
+                <Ionicons name="pulse-outline" size={16} color={palette.primary.solid} />
+                <Text style={[styles.currentBadgeText, { color: palette.primary.solid }]}>Post-Scan Care Plan</Text>
+              </View>
+              <View style={[styles.severityPill, { backgroundColor: `${completionColor}18` }]}>
+                <Text style={[styles.severityText, { color: completionColor }]}>{completionRate}% Complete</Text>
+              </View>
+            </View>
             <Text style={[styles.currentDisease, { color: palette.text.primary }]}>
               {currentDiseaseName || 'Unknown disease'}
             </Text>
             <Text style={[styles.meta, { color: palette.text.secondary }]}>
-              Confidence {Math.round(Number(recommendationPayload?.confidence || 0) * 100)}% - {toTitle(recommendationPayload?.severity || 'medium')} severity
+              Confidence {Math.round(Number(recommendationPayload?.confidence || 0) * 100)}% · {toTitle(recommendationPayload?.severity || 'medium')} severity
             </Text>
             {recommendationPayload?.dynamic_context?.advisory ? (
               <Text style={[styles.meta, { color: palette.text.secondary }]}>
                 {recommendationPayload.dynamic_context.advisory}
               </Text>
             ) : null}
-            <View style={styles.progressRow}>
-              <Ionicons name="checkmark-done-circle" size={16} color={palette.status.success} />
-              <Text style={[styles.meta, { color: palette.text.secondary }]}>{completionRate}% completed</Text>
+            <View style={styles.metricStrip}>
+              <View style={[styles.metricTile, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}>
+                <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Rescan By</Text>
+                <Text style={[styles.metricValue, { color: palette.text.primary }]}>
+                  {recommendationPayload?.dynamic_context?.recommended_rescan_by
+                    ? new Date(recommendationPayload.dynamic_context.recommended_rescan_by).toLocaleDateString()
+                    : '—'}
+                </Text>
+              </View>
+              <View style={[styles.metricTile, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}>
+                <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Priority</Text>
+                <Text style={[styles.metricValue, { color: palette.text.primary }]}>
+                  {scanRecommendations.length ? toTitle(scanRecommendations[0]?.priority || 'medium') : 'Medium'}
+                </Text>
+              </View>
             </View>
             {carePlanState?.all_completed ? (
               <View
@@ -189,14 +232,26 @@ export default function DiseaseNurseryScreen() {
             ) : null}
           </ElevatedCard>
 
-          <ElevatedCard style={styles.sectionCard}>
-            <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Action Checklist</Text>
+          <ElevatedCard style={[styles.sectionCard, { borderColor: palette.surface.border }]}>
+            <View style={styles.sectionHead}>
+              <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Action Checklist</Text>
+              <View style={[styles.sectionPill, { backgroundColor: palette.surface.soft, borderColor: palette.surface.border }]}>
+                <Ionicons name="list-outline" size={14} color={palette.text.secondary} />
+                <Text style={[styles.sectionPillText, { color: palette.text.secondary }]}>{scanRecommendations.length} Tasks</Text>
+              </View>
+            </View>
             {scanRecommendations.length > 0 ? (
               <View style={styles.recoWrap}>
                 {scanRecommendations.map((item) => (
                   <TouchableOpacity
                     key={String(item.id)}
-                    style={styles.recoRow}
+                    style={[
+                      styles.recoRow,
+                      {
+                        borderColor: item.completed ? `${palette.status.success}40` : palette.surface.border,
+                        backgroundColor: item.completed ? `${palette.status.success}10` : palette.surface.soft,
+                      },
+                    ]}
                     onPress={() => toggleRecommendation(item)}
                     disabled={updatingId === String(item.id)}
                   >
@@ -217,9 +272,18 @@ export default function DiseaseNurseryScreen() {
                       >
                         {item.text}
                       </Text>
-                      <Text style={[styles.recoMeta, { color: palette.text.tertiary }]}>
-                        {toTitle(item.priority)} priority{item.is_required ? ' - Required' : ''}
-                      </Text>
+                      <View style={styles.recoMetaRow}>
+                        <View style={[styles.priorityPill, { borderColor: palette.surface.borderStrong }]}>
+                          <Text style={[styles.recoMeta, { color: palette.text.tertiary }]}>
+                            {toTitle(item.priority)} priority
+                          </Text>
+                        </View>
+                        {item.is_required ? (
+                          <View style={[styles.requiredPill, { backgroundColor: `${palette.status.warning}20` }]}>
+                            <Text style={[styles.recoMeta, { color: palette.status.warning }]}>Required</Text>
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -229,8 +293,14 @@ export default function DiseaseNurseryScreen() {
             )}
           </ElevatedCard>
 
-          <ElevatedCard style={styles.sectionCard}>
-            <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Aloe Disease Nursery</Text>
+          <ElevatedCard style={[styles.sectionCard, { borderColor: palette.surface.border }]}>
+            <View style={styles.sectionHead}>
+              <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Aloe Disease Nursery</Text>
+              <View style={[styles.sectionPill, { backgroundColor: palette.surface.soft, borderColor: palette.surface.border }]}>
+                <Ionicons name="book-outline" size={14} color={palette.text.secondary} />
+                <Text style={[styles.sectionPillText, { color: palette.text.secondary }]}>Reference</Text>
+              </View>
+            </View>
             <Text style={[styles.sectionHint, { color: palette.text.secondary }]}>
               Reference cards for common aloe vera diseases.
             </Text>
@@ -247,7 +317,12 @@ export default function DiseaseNurseryScreen() {
                   ]}
                 >
                   <View style={styles.catalogHead}>
-                    <Text style={[styles.catalogTitle, { color: palette.text.primary }]}>{item.displayName}</Text>
+                    <View style={styles.catalogTitleWrap}>
+                      <View style={[styles.catalogIcon, { backgroundColor: `${palette.primary.solid}12` }]}>
+                        <Ionicons name="medkit-outline" size={16} color={palette.primary.solid} />
+                      </View>
+                      <Text style={[styles.catalogTitle, { color: palette.text.primary }]}>{item.displayName}</Text>
+                    </View>
                     {item.isCurrent ? (
                       <View style={[styles.currentTag, { backgroundColor: palette.primary.solid }]}>
                         <Text style={[styles.currentTagText, { color: palette.primary.on }]}>Current</Text>
@@ -296,6 +371,18 @@ const styles = StyleSheet.create({
   headerTextWrap: {
     flex: 1,
   },
+  headerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+  },
+  headerPillText: {
+    ...typography.caption,
+    fontWeight: '700',
+  },
   title: {
     ...typography.title,
   },
@@ -315,6 +402,34 @@ const styles = StyleSheet.create({
   },
   currentCard: {
     padding: spacing.md,
+    borderRadius: radius.lg,
+  },
+  currentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  currentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+  },
+  currentBadgeText: {
+    ...typography.caption,
+    fontWeight: '700',
+  },
+  severityPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+  },
+  severityText: {
+    ...typography.caption,
+    fontWeight: '700',
   },
   sectionLabel: {
     ...typography.caption,
@@ -327,11 +442,24 @@ const styles = StyleSheet.create({
     ...typography.caption,
     marginTop: spacing.xxs,
   },
-  progressRow: {
-    marginTop: spacing.xs,
+  metricStrip: {
+    marginTop: spacing.sm,
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: spacing.xs,
+  },
+  metricTile: {
+    width: '48%',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+  },
+  metricLabel: {
+    ...typography.caption,
+  },
+  metricValue: {
+    ...typography.bodyBold,
+    marginTop: 2,
   },
   completionBanner: {
     marginTop: spacing.sm,
@@ -361,9 +489,29 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     padding: spacing.md,
+    borderRadius: radius.lg,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   sectionTitle: {
     ...typography.bodyBold,
+  },
+  sectionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  sectionPillText: {
+    ...typography.caption,
+    fontWeight: '700',
   },
   sectionHint: {
     ...typography.caption,
@@ -376,7 +524,10 @@ const styles = StyleSheet.create({
   recoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.xs,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
   },
   recoTextWrap: {
     flex: 1,
@@ -387,7 +538,23 @@ const styles = StyleSheet.create({
   },
   recoMeta: {
     ...typography.caption,
-    marginTop: 1,
+  },
+  recoMetaRow: {
+    marginTop: spacing.xxs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  priorityPill: {
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  requiredPill: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
   },
   catalogWrap: {
     marginTop: spacing.sm,
@@ -403,6 +570,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  catalogTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flex: 1,
+  },
+  catalogIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   catalogTitle: {
     ...typography.bodyBold,
