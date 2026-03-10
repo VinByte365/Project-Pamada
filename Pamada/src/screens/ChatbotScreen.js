@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRoute } from '@react-navigation/native';
 import { apiRequest } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, radius, typography, shadows } from '../theme';
@@ -28,6 +29,7 @@ const initialMessages = [
 export default function ChatbotScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const route = useRoute();
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,6 +37,15 @@ export default function ChatbotScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef(null);
   const streamVersionRef = useRef(0);
+  const prefillAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+    const prefill = String(route?.params?.prefill || '').trim();
+    if (!prefill) return;
+    setInput(prefill);
+    prefillAppliedRef.current = true;
+  }, [route?.params?.prefill]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';

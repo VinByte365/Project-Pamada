@@ -75,11 +75,12 @@ export function AppDataProvider({ children }) {
     const primaryClass = scan?.yolo_predictions?.[0]?.class
       || (scan?.analysis_result?.disease_detected ? 'leaf_spot' : 'healthy');
     const lifecycleStage = String(scan?.plant_id?.current_status?.lifecycle_stage || '').toLowerCase();
+    const isHarvestReady = maturity === 'Ready for Harvest' || scan?.analysis_result?.harvest_ready === true;
     const status = lifecycleStage === 'harvested'
       ? 'harvested'
       : noPlantDetected
         ? 'leaf_spot'
-        : (scan?.analysis_result?.harvest_ready ? 'ready' : primaryClass);
+        : (isHarvestReady ? 'ready' : primaryClass);
     const resolvedScanNumber = Number(scan?.scan_number || fallbackScanNumber || previous?.scanNumber || 0) || null;
     const basePlantName = scan?.plant_id?.plant_id
       ? `${scan.plant_id.plant_id}${scan.plant_id.location?.plot_number ? ` - Plot ${scan.plant_id.location.plot_number}` : ''}`

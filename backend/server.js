@@ -25,10 +25,7 @@ if (String(process.env.AUTO_SEED_PRESET_RECOMMENDATIONS || 'false').toLowerCase(
     .catch((error) => console.error('Preset recommendation seed failed:', error.message));
 }
 // Middleware
-app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || '*',
-  credentials: true
-}));
+app.use(cors());
 app.use(requestContext);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

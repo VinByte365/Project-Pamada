@@ -15,18 +15,24 @@ function resolveDiseaseKey(mlResults = {}) {
     .toLowerCase();
   const yoloClass = String(mlResults?.yolo_predictions?.[0]?.class || '').trim().toLowerCase();
   const aliasMap = {
-    fungal_infection: 'fungal_infection',
-    leaf_spot: 'fungal_infection',
-    aloe_rust: 'fungal_infection',
-    anthracnose: 'fungal_infection',
-    root_rot: 'root_rot',
-    bacterial_soft_rot: 'bacterial_spot',
-    bacterial_spot: 'bacterial_spot',
     healthy: 'healthy',
-    sunburn: 'unknown_condition',
-    scale_insect: 'unknown_condition',
-    mealybug: 'unknown_condition',
-    spider_mite: 'unknown_condition',
+    leaf_spot: 'leaf_spot',
+    root_rot: 'root_rot',
+    sunburn: 'sunburn',
+    aloe_rust: 'aloe_rust',
+    bacterial_soft_rot: 'bacterial_soft_rot',
+    anthracnose: 'anthracnose',
+    scale_insect: 'scale_insect',
+    mealybug: 'mealybug',
+    spider_mite: 'spider_mite',
+    fungal_infection: 'leaf_spot',
+    bacterial_spot: 'bacterial_soft_rot',
+    fungal_disease: 'leaf_spot',
+    fungus: 'leaf_spot',
+    rust: 'aloe_rust',
+    rot: 'root_rot',
+    insect: 'scale_insect',
+    unknown_condition: 'unknown_condition',
   };
   return aliasMap[rawDiseaseKey] || aliasMap[yoloClass] || 'unknown_condition';
 }

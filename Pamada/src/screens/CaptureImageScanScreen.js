@@ -79,8 +79,15 @@ export default function CaptureImageScanScreen() {
             : 'Not Available';
     const primaryClass =
       scan?.yolo_predictions?.[0]?.class || (scan?.analysis_result?.disease_detected ? 'leaf_spot' : 'healthy');
+    const normalizedDiseaseKey = String(
+      scan?.recommendation_payload?.disease_key || scan?.disease_key || ''
+    ).toLowerCase();
+    const isHealthyResult =
+      normalizedDiseaseKey === 'healthy' ||
+      primaryClass === 'healthy' ||
+      scan?.analysis_result?.disease_detected === false;
     const diseaseFromPayload = scan?.recommendation_payload?.disease;
-    const diseaseList = diseaseFromPayload ? [diseaseFromPayload] : [];
+    const diseaseList = !isHealthyResult && diseaseFromPayload ? [diseaseFromPayload] : [];
     const structuredRecommendations = Array.isArray(scan?.recommendation_payload?.recommendations)
       ? scan.recommendation_payload.recommendations
       : [];

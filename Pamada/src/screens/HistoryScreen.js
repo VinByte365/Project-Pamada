@@ -95,6 +95,13 @@ export default function HistoryScreen() {
     });
   };
 
+  const openHarvestGuide = () => {
+    if (!selectedScan) return;
+    navigation.navigate('Chatbot', {
+      prefill: 'My aloe vera is ready for harvest. What steps should I follow?',
+    });
+  };
+
   const toggleSection = (key) => {
     setExpandedSections((prev) => ({
       ...prev,
@@ -404,14 +411,24 @@ export default function HistoryScreen() {
                         fullWidth
                       />
                       {selectedScan?.status === 'ready' ? (
-                        <EnhancedButton
-                          label="Mark as Harvested"
-                          type="primary"
-                          icon="checkmark-done-outline"
-                          onPress={handleMarkHarvested}
-                          style={styles.markHarvestedButton}
-                          fullWidth
-                        />
+                        <>
+                          <EnhancedButton
+                            label="Open Harvest Guide"
+                            type="primary"
+                            icon="leaf-outline"
+                            onPress={openHarvestGuide}
+                            style={styles.markHarvestedButton}
+                            fullWidth
+                          />
+                          <EnhancedButton
+                            label="Mark as Harvested"
+                            type="primary"
+                            icon="checkmark-done-outline"
+                            onPress={handleMarkHarvested}
+                            style={styles.markHarvestedButton}
+                            fullWidth
+                          />
+                        </>
                       ) : null}
                     </>
                   ) : null}

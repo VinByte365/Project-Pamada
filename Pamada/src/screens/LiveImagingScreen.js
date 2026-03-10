@@ -16,7 +16,7 @@ import useAppTheme from '../theme/useAppTheme';
 import { initializeLiveDetectionModel, runLiveDetection } from '../services/liveDetectionEngine';
 
 const CONFIDENCE_THRESHOLD = 0.5;
-const FRAME_INTERVAL_MS = 1800;
+const FRAME_INTERVAL_MS = 250;
 
 const toTitle = (value = '') =>
   String(value)
@@ -138,8 +138,12 @@ export default function LiveImagingScreen() {
         );
 
         setDetections(filtered);
+        const topLabel = filtered[0]?.label || '';
+        const normalizedTop = String(topLabel).toLowerCase();
+        const displayDisease = normalizedTop === 'healthy' ? '' : (response.disease || topLabel);
+
         setLastResult({
-          disease: response.disease || (filtered.length ? filtered[0].label : ''),
+          disease: displayDisease,
           maturity: response.maturity || '',
           confidence: Number(response.confidence || 0),
           processingTimeMs: Number(response.processingTimeMs || 0),
@@ -220,7 +224,7 @@ export default function LiveImagingScreen() {
         >
           <Text style={styles.infoHeading}>Live Result</Text>
           <Text style={styles.infoLine}>
-            Disease: {detections.length ? toTitle(lastResult.disease || 'healthy') : 'None'}
+            Disease: {detections.length ? (lastResult.disease ? toTitle(lastResult.disease) : 'None') : 'None'}
           </Text>
           <Text style={styles.infoLine}>
             Maturity: {lastResult.maturity ? toTitle(lastResult.maturity) : '--'}

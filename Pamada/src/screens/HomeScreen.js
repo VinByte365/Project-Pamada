@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   ImageBackground,
+  Linking,
   Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import * as Location from 'expo-location';
 import ScreenContainer from '../components/common/ScreenContainer';
 import AnimatedInView from '../components/common/AnimatedInView';
 import EmptyState from '../components/common/EmptyState';
@@ -110,6 +114,22 @@ function buildLeafletHtml({ markers, center, zoom, markerColor, interactive = tr
       const region = escapeHtml(farm.region || 'Philippines');
       const marker = L.circleMarker([Number(farm.lat), Number(farm.lng)], markerStyle).addTo(map);
       marker.bindPopup('<strong>' + name + '</strong><br/>' + region);
+      marker.on('click', () => {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type: 'marker_press',
+              payload: {
+                id: farm.id,
+                name: farm.name,
+                region: farm.region,
+                lat: farm.lat,
+                lng: farm.lng,
+              },
+            })
+          );
+        }
+      });
     });
 
     if (markers.length > 1) {
@@ -141,6 +161,9 @@ export default function HomeScreen() {
   const [heroGifUrl, setHeroGifUrl] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [selectedFarm, setSelectedFarm] = useState(null);
+  const [gettingDirections, setGettingDirections] = useState(false);
 
   const displayName = user?.full_name?.split(' ')[0] || 'Grower';
   const dateLabel = useMemo(
@@ -301,6 +324,7 @@ export default function HomeScreen() {
   const leafletMarkers = useMemo(
     () =>
       farmMarkers.map((farm) => ({
+        id: farm.id ?? farm._id ?? `${farm?.coordinates?.lat}-${farm?.coordinates?.lng}`,
         lat: Number(farm.coordinates.lat),
         lng: Number(farm.coordinates.lng),
         name: farm.displayName || farm.name,
@@ -340,6 +364,108 @@ export default function HomeScreen() {
       interactive: true,
     });
   }, [leafletMarkers, mapCenter, leafletZoom, palette.primary.solid]);
+
+  const openFarmDrawer = React.useCallback((farm) => {
+    if (!farm) return;
+    setSelectedFarm(farm);
+    setDrawerVisible(true);
+  }, []);
+
+  const closeFarmDrawer = React.useCallback(() => {
+    setDrawerVisible(false);
+    setSelectedFarm(null);
+  }, []);
+
+  const resolveFarmFromMarker = React.useCallback(
+    (marker) => {
+      if (!marker) return null;
+      const markerId = marker.id != null ? String(marker.id) : '';
+      if (markerId) {
+        const match = nearbyFarms.find(
+          (farm) => String(farm?.id ?? farm?._id ?? '') === markerId
+        );
+        if (match) return match;
+      }
+      const lat = Number(marker.lat);
+      const lng = Number(marker.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const match = nearbyFarms.find((farm) => {
+          const farmLat = Number(farm?.coordinates?.lat);
+          const farmLng = Number(farm?.coordinates?.lng);
+          return (
+            Number.isFinite(farmLat) &&
+            Number.isFinite(farmLng) &&
+            Math.abs(farmLat - lat) < 0.00001 &&
+            Math.abs(farmLng - lng) < 0.00001
+          );
+        });
+        if (match) return match;
+      }
+      return {
+        displayName: marker.name || 'Aloe Garden',
+        region: marker.region || 'Philippines',
+        coordinates: {
+          lat: marker.lat,
+          lng: marker.lng,
+        },
+      };
+    },
+    [nearbyFarms]
+  );
+
+  const handleMapMessage = React.useCallback(
+    (event) => {
+      const raw = event?.nativeEvent?.data;
+      if (!raw) return;
+      try {
+        const message = JSON.parse(raw);
+        if (message?.type !== 'marker_press') return;
+        const farm = resolveFarmFromMarker(message.payload || {});
+        openFarmDrawer(farm);
+      } catch (error) {
+        // Ignore malformed map messages.
+      }
+    },
+    [openFarmDrawer, resolveFarmFromMarker]
+  );
+
+  const resolveFarmCoords = React.useCallback((farm) => {
+    if (!farm) return null;
+    const lat = Number(farm?.coordinates?.lat ?? farm?.lat);
+    const lng = Number(farm?.coordinates?.lng ?? farm?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  }, []);
+
+  const handleDirections = React.useCallback(async () => {
+    const coords = resolveFarmCoords(selectedFarm);
+    if (!coords || gettingDirections) return;
+    setGettingDirections(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Location Needed', 'Enable location permission to get directions from your current position.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const origin = `${position.coords.latitude},${position.coords.longitude}`;
+      const destination = `${coords.lat},${coords.lng}`;
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+        origin
+      )}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+      await Linking.openURL(url);
+    } catch (error) {
+      Alert.alert('Directions Error', error.message || 'Unable to open directions right now.');
+    } finally {
+      setGettingDirections(false);
+    }
+  }, [gettingDirections, resolveFarmCoords, selectedFarm]);
+
+  const selectedFarmName = selectedFarm?.displayName || selectedFarm?.name || 'Aloe Garden';
+  const selectedFarmRegion = selectedFarm?.region || 'Philippines';
+  const selectedFarmCoords = resolveFarmCoords(selectedFarm);
 
   return (
     <ScreenContainer padding={false} edges={['bottom']}>
@@ -492,6 +618,7 @@ export default function HomeScreen() {
                     scrollEnabled={false}
                     showsVerticalScrollIndicator={false}
                     showsHorizontalScrollIndicator={false}
+                    onMessage={handleMapMessage}
                   />
 
                   <TouchableOpacity
@@ -516,7 +643,12 @@ export default function HomeScreen() {
               ) : (
                 <View style={styles.farmList}>
                   {nearbyFarms.slice(0, 3).map((farm) => (
-                    <View key={`nearby-${farm.id}`} style={styles.farmRow}>
+                    <TouchableOpacity
+                      key={`nearby-${farm.id}`}
+                      style={styles.farmRow}
+                      onPress={() => openFarmDrawer(farm)}
+                      activeOpacity={0.8}
+                    >
                       <Ionicons name="location" size={14} color={palette.primary.solid} />
                       <View style={styles.farmInfo}>
                         <Text style={[styles.farmName, { color: palette.text.primary }]} numberOfLines={1}>
@@ -527,7 +659,7 @@ export default function HomeScreen() {
                         </Text>
                       </View>
                       <Ionicons name="navigate-circle-outline" size={18} color={palette.primary.solid} />
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               )}
@@ -617,10 +749,66 @@ export default function HomeScreen() {
                 source={{ html: leafletModalHtml }}
                 style={styles.mapModalView}
                 scrollEnabled={false}
+                onMessage={handleMapMessage}
               />
             ) : null}
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={drawerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeFarmDrawer}
+      >
+        <Pressable style={styles.drawerBackdrop} onPress={closeFarmDrawer}>
+          <Pressable
+            style={[
+              styles.drawerSheet,
+              {
+                backgroundColor: palette.surface.light,
+                borderColor: palette.surface.border,
+              },
+            ]}
+            onPress={() => {}}
+          >
+            <View style={[styles.drawerHandle, { backgroundColor: palette.surface.border }]} />
+            <Text style={[styles.drawerTitle, { color: palette.text.primary }]}>Farm Details</Text>
+            <View style={styles.drawerDetails}>
+              <Text style={[styles.drawerName, { color: palette.text.primary }]} numberOfLines={1}>
+                {selectedFarmName}
+              </Text>
+              <Text style={[styles.drawerMeta, { color: palette.text.secondary }]} numberOfLines={1}>
+                {selectedFarmRegion}
+              </Text>
+              {selectedFarmCoords ? (
+                <Text style={[styles.drawerMeta, { color: palette.text.tertiary }]} numberOfLines={1}>
+                  {selectedFarmCoords.lat.toFixed(5)}, {selectedFarmCoords.lng.toFixed(5)}
+                </Text>
+              ) : null}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.drawerAction, { backgroundColor: palette.surface.soft }]}
+              onPress={handleDirections}
+              disabled={gettingDirections || !selectedFarmCoords}
+            >
+              <Ionicons name="navigate-outline" size={18} color={palette.text.primary} />
+              <Text style={[styles.drawerActionText, { color: palette.text.primary }]}>
+                {gettingDirections ? 'Opening directions...' : 'Directions from current location'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.drawerAction, { backgroundColor: palette.surface.soft }]}
+              onPress={closeFarmDrawer}
+            >
+              <Ionicons name="close-outline" size={18} color={palette.text.secondary} />
+              <Text style={[styles.drawerActionText, { color: palette.text.secondary }]}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
     </ScreenContainer>
   );
@@ -868,6 +1056,53 @@ const styles = StyleSheet.create({
   },
   mapModalView: {
     flex: 1,
+  },
+  drawerBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  drawerSheet: {
+    borderTopLeftRadius: radius.floating,
+    borderTopRightRadius: radius.floating,
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  drawerHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: radius.pill,
+    marginBottom: spacing.xs,
+  },
+  drawerTitle: {
+    ...typography.bodyBold,
+    marginBottom: spacing.xs,
+  },
+  drawerDetails: {
+    gap: 2,
+    marginBottom: spacing.xs,
+  },
+  drawerName: {
+    ...typography.bodyBold,
+  },
+  drawerMeta: {
+    ...typography.caption,
+  },
+  drawerAction: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  drawerActionText: {
+    ...typography.body,
+    fontWeight: '700',
   },
   farmList: {
     marginTop: spacing.sm,

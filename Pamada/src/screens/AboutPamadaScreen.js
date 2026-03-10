@@ -20,7 +20,7 @@ export default function AboutPamadaScreen({ navigation }) {
   // Example image source once you add local assets:
   // photo: require('../../assets/member-1.jpg')
   const members = [
-    { id: 'member-1', name: 'Melvin Catuera', role: 'Backend Developer / UI/UX Designer / Mobile', photo: 'https://res.cloudinary.com/dhsevwka1/image/upload/v1772682841/IMG_20240424_194336_847-removebg-preview_xevr6i.png' },
+    { id: 'member-1', name: 'Melvin Catuera', role: 'Backend Developer / UI/UX Designer / Mobile', photo: "https://res.cloudinary.com/dhsevwka1/image/upload/v1772682841/IMG_20240424_194336_847-removebg-preview_xevr6i.png" },
     { id: 'member-2', name: 'John Louis Dadivas', role: '', photo: 'https://res.cloudinary.com/dhsevwka1/image/upload/v1772714098/lalaya_y1hwvc.png' },
     { id: 'member-3', name: 'Hazel Anne Elumba', role: 'Frontend Developer / UI/UX Designer / Website', photo: 'https://res.cloudinary.com/dhsevwka1/image/upload/v1772682841/haz_sldnfj.jpg' },
     { id: 'member-4', name: 'Maria Alyssha Sacay', role: '', photo: 'https://res.cloudinary.com/dhsevwka1/image/upload/v1772682843/wawawawa_bk3mcr.png'},
@@ -54,7 +54,7 @@ export default function AboutPamadaScreen({ navigation }) {
             <View key={member.id} style={[styles.memberCard, { width: cardWidth }]}>
               <View style={styles.photoPlaceholder}>
                 {member.photo ? (
-                  <Image source={member.photo} style={styles.memberPhoto} />
+                  <Image source={{ uri: member.photo }} style={styles.memberPhoto} />
                 ) : (
                   <Ionicons name="person-outline" size={34} color={colors.text.secondary} />
                 )}
