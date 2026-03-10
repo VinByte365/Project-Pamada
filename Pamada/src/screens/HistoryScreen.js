@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Alert, FlatList, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import {
   Badge,
@@ -14,7 +15,7 @@ import {
 import PlantPreviewTile from '../components/ui/PlantPreviewTile';
 import ElevatedCard from '../components/ui/ElevatedCard';
 import useAppTheme from '../theme/useAppTheme';
-import { spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
 import { useAppData } from '../contexts/AppDataContext';
 import { useSnackbar } from '../contexts/SnackbarContext';
 
@@ -117,6 +118,30 @@ export default function HistoryScreen() {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const renderActionButton = ({ label, icon, tone, onPress, helper }) => {
+    const isDanger = tone === 'danger';
+    const background = isDanger ? 'rgba(220,38,38,0.12)' : palette.surface.soft;
+    const border = isDanger ? 'rgba(220,38,38,0.32)' : palette.surface.borderStrong;
+    const textColor = isDanger ? palette.status.danger : palette.text.primary;
+    const iconColor = isDanger ? palette.status.danger : palette.primary.solid;
+
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        style={[styles.actionButton, { backgroundColor: background, borderColor: border }]}
+      >
+        <View style={styles.actionIcon}>
+          <Ionicons name={icon} size={18} color={iconColor} />
+        </View>
+        <View style={styles.actionCopy}>
+          <Text style={[styles.actionLabel, { color: textColor }]}>{label}</Text>
+          {helper ? <Text style={[styles.actionHelper, { color: palette.text.secondary }]}>{helper}</Text> : null}
+        </View>
+        <Ionicons name="chevron-forward-outline" size={18} color={palette.text.tertiary} />
+      </TouchableOpacity>
+    );
   };
 
   const handleDeleteSelectedScan = () => {
@@ -238,26 +263,44 @@ export default function HistoryScreen() {
       <Modal
         visible={Boolean(selectedScan)}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setSelectedScan(null)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalScroll}>
+          <View style={[styles.modalSheet, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
+            <View style={styles.drawerHandle} />
+            <View style={[styles.modalStickyHeader, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
+              <Text style={[styles.modalTitle, { color: palette.text.primary }]}>Scan Details</Text>
+              <TouchableOpacity onPress={() => setSelectedScan(null)}>
+                <Ionicons name="close" size={20} color={palette.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
             <ScrollView
               contentContainerStyle={styles.modalContentScroll}
-              stickyHeaderIndices={[0]}
+              stickyHeaderIndices={[]}
               showsVerticalScrollIndicator={false}
             >
-              <View style={[styles.modalStickyHeader, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
-                <Text style={[styles.modalTitle, { color: palette.text.primary }]}>Scan Details</Text>
-                <TouchableOpacity onPress={() => setSelectedScan(null)}>
-                  <Ionicons name="close" size={20} color={palette.text.secondary} />
-                </TouchableOpacity>
-              </View>
-
               <View style={[styles.modalCard, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
+                <LinearGradient
+                  colors={['rgba(10,96,62,0.12)', 'rgba(10,96,62,0.02)']}
+                  style={styles.modalAccent}
+                />
                 {selectedScan?.image ? (
-                  <Image source={{ uri: selectedScan.image }} style={styles.modalImage} resizeMode="cover" />
+                  <View style={styles.modalImageWrap}>
+                    <Image source={{ uri: selectedScan.image }} style={styles.modalImage} resizeMode="cover" />
+                    <View style={styles.modalImageOverlay} />
+                    <View style={styles.modalImageMeta}>
+                    <View style={[styles.metaPill, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+                      <Ionicons name="scan-outline" size={12} color="#FFFFFF" />
+                        <Text style={styles.metaPillText} numberOfLines={1}>Scan Snapshot</Text>
+                    </View>
+                    <View style={[styles.metaPill, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+                      <Ionicons name="calendar-outline" size={12} color="#FFFFFF" />
+                        <Text style={styles.metaPillText} numberOfLines={1}>{selectedScan?.date || '-'}</Text>
+                    </View>
+                    </View>
+                  </View>
                 ) : null}
 
                 <ElevatedCard style={styles.detailBlock}>
@@ -306,6 +349,31 @@ export default function HistoryScreen() {
                       variant="outline"
                       size="small"
                     />
+                  </View>
+                </ElevatedCard>
+
+                <Divider margin={spacing.sm} />
+
+                <ElevatedCard style={styles.detailBlock}>
+                  <View style={styles.sectionHead}>
+                    <Text style={[styles.sectionHeadTitle, { color: palette.text.primary }]}>Key Metrics</Text>
+                    <Ionicons name="stats-chart-outline" size={18} color={palette.text.secondary} />
+                  </View>
+                  <View style={styles.metricRow}>
+                    <View style={[styles.metricCard, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}>
+                      <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Confidence</Text>
+                      <Text style={[styles.metricValue, { color: palette.primary.solid }]}>
+                        {typeof selectedScan?.confidenceLevel === 'number' ? `${selectedScan.confidenceLevel}%` : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={[styles.metricCard, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}>
+                      <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Maturity</Text>
+                      <Text style={[styles.metricValue, { color: palette.text.primary }]}>{selectedScan?.maturity || 'N/A'}</Text>
+                    </View>
+                    <View style={[styles.metricCard, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}>
+                      <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>Urgency</Text>
+                      <Text style={[styles.metricValue, { color: palette.text.primary }]}>{selectedScan?.urgency || 'Routine Care'}</Text>
+                    </View>
                   </View>
                 </ElevatedCard>
 
@@ -399,44 +467,46 @@ export default function HistoryScreen() {
                           <Text style={[styles.detailValue, { color: palette.text.secondary }]}>
                             Continue disease care in the dedicated Disease Nursery page.
                           </Text>
-                          <EnhancedButton
-                            label="Open Disease Nursery"
-                            type="primary"
-                            icon="leaf-outline"
-                            onPress={openDiseaseNursery}
-                            style={styles.nurseryButton}
-                            fullWidth
-                          />
+                          <View style={styles.actionGrid}>
+                            {renderActionButton({
+                              label: 'Open Disease Nursery',
+                              icon: 'leaf-outline',
+                              tone: 'primary',
+                              onPress: openDiseaseNursery,
+                              helper: 'View care plan and treatment steps',
+                            })}
+                          </View>
                         </>
                       ) : null}
-                      <EnhancedButton
-                        label="Delete Scan History"
-                        type="danger"
-                        icon="trash-outline"
-                        onPress={handleDeleteSelectedScan}
-                        style={styles.deleteButton}
-                        fullWidth
-                      />
                       {selectedScan?.status === 'ready' ? (
                         <>
-                          <EnhancedButton
-                            label="Open Harvest Guide"
-                            type="primary"
-                            icon="leaf-outline"
-                            onPress={openHarvestGuide}
-                            style={styles.markHarvestedButton}
-                            fullWidth
-                          />
-                          <EnhancedButton
-                            label="Mark as Harvested"
-                            type="primary"
-                            icon="checkmark-done-outline"
-                            onPress={handleMarkHarvested}
-                            style={styles.markHarvestedButton}
-                            fullWidth
-                          />
+                          <View style={styles.actionGrid}>
+                            {renderActionButton({
+                              label: 'Open Harvest Guide',
+                              icon: 'leaf-outline',
+                              tone: 'primary',
+                              onPress: openHarvestGuide,
+                              helper: 'Best practices for harvesting aloe',
+                            })}
+                            {renderActionButton({
+                              label: 'Mark as Harvested',
+                              icon: 'checkmark-done-outline',
+                              tone: 'primary',
+                              onPress: handleMarkHarvested,
+                              helper: 'Move this scan into harvested status',
+                            })}
+                          </View>
                         </>
                       ) : null}
+                      <View style={styles.actionGrid}>
+                        {renderActionButton({
+                          label: 'Delete Scan History',
+                          icon: 'trash-outline',
+                          tone: 'danger',
+                          onPress: handleDeleteSelectedScan,
+                          helper: 'Remove this scan from your history',
+                        })}
+                      </View>
                     </>
                   ) : null}
                 </ElevatedCard>
@@ -554,45 +624,96 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.32)',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    justifyContent: 'flex-end',
   },
-  modalScroll: {
-    flex: 1,
-    justifyContent: 'center',
+  modalSheet: {
+    maxHeight: '92%',
+    borderTopLeftRadius: radius.floating,
+    borderTopRightRadius: radius.floating,
+    borderWidth: 1,
     paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+  },
+  drawerHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    marginBottom: spacing.sm,
   },
   modalContentScroll: {
     paddingBottom: spacing.lg,
   },
   modalStickyHeader: {
-    minHeight: 54,
-    borderWidth: 1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomWidth: 0,
-    paddingHorizontal: spacing.md,
+    minHeight: 48,
+    borderWidth: 0,
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   modalCard: {
     width: '100%',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderTopWidth: 0,
     padding: spacing.md,
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  modalAccent: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 90,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   modalTitle: {
     ...typography.bodyBold,
   },
+  modalImageWrap: {
+    width: '100%',
+    height: 220,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   modalImage: {
     width: '100%',
-    height: 200,
-    borderRadius: 14,
-    marginTop: spacing.sm,
+    height: '100%',
+  },
+  modalImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  modalImageMeta: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    bottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+    maxWidth: '48%',
+  },
+  metaPillText: {
+    ...typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   detailName: {
     ...typography.title,
@@ -610,11 +731,12 @@ const styles = StyleSheet.create({
   },
   metricRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
     marginTop: spacing.sm,
   },
   metricCard: {
-    flex: 1,
+    width: '48%',
     borderWidth: 1,
     borderRadius: 12,
     padding: spacing.sm,
@@ -642,7 +764,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   detailBlock: {
-    padding: spacing.sm,
+    padding: spacing.md,
   },
   sectionHead: {
     minHeight: 36,
@@ -672,13 +794,36 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     marginTop: 2,
   },
-  nurseryButton: {
+  actionGrid: {
     marginTop: spacing.sm,
+    gap: spacing.xs,
   },
-  deleteButton: {
-    marginTop: spacing.md,
+  actionButton: {
+    minHeight: 56,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  markHarvestedButton: {
-    marginTop: spacing.sm,
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionCopy: {
+    flex: 1,
+  },
+  actionLabel: {
+    ...typography.bodyBold,
+  },
+  actionHelper: {
+    ...typography.caption,
+    marginTop: 2,
   },
 });
