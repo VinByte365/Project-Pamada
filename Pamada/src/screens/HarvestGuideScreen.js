@@ -1,47 +1,16 @@
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { colors, radius, spacing, typography, shadows } from '../theme';
 
-const VIDEO_URL = 'https://videos.pexels.com/video-files/11431472/11431472-uhd_3840_2160_24fps.mp4';
+const YOUTUBE_EMBED = 'https://www.youtube-nocookie.com/embed/y8LvkArI6jY?rel=0&modestbranding=1&playsinline=1';
+const YOUTUBE_WATCH = 'https://www.youtube.com/watch?v=y8LvkArI6jY';
+const YOUTUBE_THUMB = 'https://img.youtube.com/vi/y8LvkArI6jY/hqdefault.jpg';
 
 export default function HarvestGuideScreen({ navigation }) {
-  const videoHtml = useMemo(
-    () => `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <style>
-      html, body { margin: 0; padding: 0; background: #0b0f0c; height: 100%; }
-      .frame {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        background: #0b0f0c;
-      }
-      video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="frame">
-      <video controls playsinline>
-        <source src="${VIDEO_URL}" type="video/mp4" />
-      </video>
-    </div>
-  </body>
-</html>`,
-    []
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -76,13 +45,36 @@ export default function HarvestGuideScreen({ navigation }) {
         <View style={styles.videoCard}>
           <View style={styles.videoHeader}>
             <Text style={styles.sectionTitle}>Harvest Demo Video</Text>
-            <Text style={styles.sectionHint}>Open-source stock footage</Text>
           </View>
           <View style={styles.videoFrame}>
-            <WebView originWhitelist={['*']} source={{ html: videoHtml }} />
+            {Platform.OS === 'android' ? (
+              <TouchableOpacity
+                style={styles.videoPoster}
+                onPress={() => Linking.openURL(YOUTUBE_WATCH).catch(() => {})}
+                accessibilityRole="button"
+                accessibilityLabel="Open harvest guide video in YouTube"
+              >
+                <Image source={{ uri: YOUTUBE_THUMB }} style={styles.videoPosterImage} />
+                <View style={styles.videoPosterOverlay} />
+                <View style={styles.videoPosterBadge}>
+                  <Ionicons name="logo-youtube" size={18} color="#FFFFFF" />
+                  <Text style={styles.videoPosterText}>Open in YouTube</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <WebView
+                originWhitelist={['*']}
+                source={{ uri: YOUTUBE_EMBED }}
+                javaScriptEnabled
+                domStorageEnabled
+                allowsFullscreenVideo
+                mediaPlaybackRequiresUserAction
+                allowsInlineMediaPlayback
+              />
+            )}
           </View>
           <Text style={styles.videoCaption}>
-            Video source: Pexels (free stock footage).
+            Video source: The Aloe Vera Garden (opens externally on Android).
           </Text>
         </View>
 
@@ -206,6 +198,34 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#0b0f0c',
+  },
+  videoPoster: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPosterImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  videoPosterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  videoPosterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  videoPosterText: {
+    ...typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   videoCaption: {
     ...typography.caption,
