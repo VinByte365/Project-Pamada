@@ -37,6 +37,26 @@ const LUZON_GARDENS = [
   { id: 'luzon-8', name: 'Bicol Aloe Demo Farm', region: 'Naga, Camarines Sur', coordinates: { lat: 13.6218, lng: 123.1948 } },
 ];
 
+const VISAYAS_GARDENS = [
+  { id: 'visayas-1', name: 'Cebu Aloe Growers Collective', region: 'Cebu City, Cebu', coordinates: { lat: 10.3157, lng: 123.8854 } },
+  { id: 'visayas-2', name: 'Iloilo Aloe Garden', region: 'Iloilo City, Iloilo', coordinates: { lat: 10.7202, lng: 122.5621 } },
+  { id: 'visayas-3', name: 'Bacolod Aloe Farm', region: 'Bacolod, Negros Occidental', coordinates: { lat: 10.6765, lng: 122.9509 } },
+  { id: 'visayas-4', name: 'Leyte Aloe Nursery', region: 'Tacloban, Leyte', coordinates: { lat: 11.2430, lng: 125.0048 } },
+];
+
+const MINDANAO_GARDENS = [
+  { id: 'mindanao-1', name: 'Davao Aloe Development Farm', region: 'Davao City, Davao del Sur', coordinates: { lat: 7.1907, lng: 125.4553 } },
+  { id: 'mindanao-2', name: 'Cagayan de Oro Aloe Farm', region: 'Cagayan de Oro, Misamis Oriental', coordinates: { lat: 8.4542, lng: 124.6319 } },
+  { id: 'mindanao-3', name: 'General Santos Aloe Garden', region: 'General Santos, South Cotabato', coordinates: { lat: 6.1164, lng: 125.1716 } },
+  { id: 'mindanao-4', name: 'Zamboanga Aloe Nursery', region: 'Zamboanga City, Zamboanga del Sur', coordinates: { lat: 6.9214, lng: 122.0790 } },
+];
+
+const PHILIPPINES_GARDENS = [
+  ...LUZON_GARDENS,
+  ...VISAYAS_GARDENS,
+  ...MINDANAO_GARDENS,
+];
+
 function sanitizeNotifications(preferences = {}) {
   return {
     notification_enabled: preferences.notification_enabled !== false,
@@ -413,6 +433,21 @@ exports.getLuzonGardens = asyncHandler(async (req, res) => {
         longitude: 121.0,
         latitudeDelta: 6.8,
         longitudeDelta: 5.8,
+      },
+    },
+  });
+});
+
+exports.getPhilippinesFarms = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      gardens: PHILIPPINES_GARDENS,
+      region: {
+        latitude: 12.8797,
+        longitude: 121.7740,
+        latitudeDelta: 14.5,
+        longitudeDelta: 11.2,
       },
     },
   });

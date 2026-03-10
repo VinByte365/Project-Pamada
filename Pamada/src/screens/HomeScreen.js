@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Callout, Marker } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import ScreenContainer from '../components/common/ScreenContainer';
 import AnimatedInView from '../components/common/AnimatedInView';
 import EmptyState from '../components/common/EmptyState';
@@ -33,6 +33,99 @@ const segmentOptions = [
   { id: 'priority', label: 'Priority', icon: 'flash-outline' },
   { id: 'upcoming', label: 'Upcoming', icon: 'calendar-outline' },
 ];
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function regionToZoom(region) {
+  if (!region || !Number.isFinite(Number(region.longitudeDelta))) return 11;
+  const longitudeDelta = Math.max(Number(region.longitudeDelta), 0.01);
+  const zoom = Math.round(Math.log2(360 / longitudeDelta));
+  return clamp(zoom, 3, 18);
+}
+
+function buildLeafletHtml({ markers, center, zoom, markerColor, interactive = true }) {
+  const safeMarkers = JSON.stringify(markers || []);
+  const safeCenter = JSON.stringify(center || { lat: 16.2, lng: 121.0 });
+  const safeZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 7;
+  const dragEnabled = interactive ? 'true' : 'false';
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #f5f8f4; }
+    .leaflet-container { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', {
+      zoomControl: ${interactive ? 'true' : 'false'},
+      attributionControl: true,
+      dragging: ${dragEnabled},
+      scrollWheelZoom: ${dragEnabled},
+      doubleClickZoom: ${dragEnabled},
+      boxZoom: ${dragEnabled},
+      keyboard: ${dragEnabled},
+      tap: ${dragEnabled},
+      touchZoom: ${dragEnabled}
+    });
+
+    const center = ${safeCenter};
+    map.setView([Number(center.lat), Number(center.lng)], ${safeZoom});
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markers = ${safeMarkers};
+    const markerStyle = {
+      radius: 7,
+      fillColor: '${markerColor}',
+      color: '#ffffff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.95
+    };
+
+    const escapeHtml = (value) =>
+      String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    markers.forEach((farm) => {
+      if (!Number.isFinite(Number(farm.lat)) || !Number.isFinite(Number(farm.lng))) return;
+      const name = escapeHtml(farm.name || 'Aloe Garden');
+      const region = escapeHtml(farm.region || 'Philippines');
+      const marker = L.circleMarker([Number(farm.lat), Number(farm.lng)], markerStyle).addTo(map);
+      marker.bindPopup('<strong>' + name + '</strong><br/>' + region);
+    });
+
+    if (markers.length > 1) {
+      const bounds = L.latLngBounds(
+        markers
+          .filter((farm) => Number.isFinite(Number(farm.lat)) && Number.isFinite(Number(farm.lng)))
+          .map((farm) => [Number(farm.lat), Number(farm.lng)])
+      );
+      if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.2));
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -97,7 +190,7 @@ export default function HomeScreen() {
     setFarmsError('');
     try {
       const [gardensResponse, heroResponse] = await Promise.all([
-        apiRequest('/api/v1/settings/luzon-gardens', {
+        apiRequest('/api/v1/settings/philippines-farms', {
           method: 'GET',
           token,
         }),
@@ -117,7 +210,7 @@ export default function HomeScreen() {
         return {
           ...farm,
           distanceKm: Number.POSITIVE_INFINITY,
-          displayName: farm?.name || 'Luzon Aloe Garden',
+          displayName: farm?.name || 'Philippine Aloe Garden',
           coordinates: {
             lat: farmLat,
             lng: farmLng,
@@ -131,7 +224,7 @@ export default function HomeScreen() {
         setHeroGifUrl(heroUrl);
       }
     } catch (error) {
-      setFarmsError(error.message || 'Failed to load Luzon garden data.');
+      setFarmsError(error.message || 'Failed to load Philippines farm data.');
       setNearbyFarms([]);
     } finally {
       setFarmsLoading(false);
@@ -140,7 +233,7 @@ export default function HomeScreen() {
 
   const refreshGardenPins = React.useCallback(async () => {
     try {
-      const gardensResponse = await apiRequest('/api/v1/settings/luzon-gardens', {
+      const gardensResponse = await apiRequest('/api/v1/settings/philippines-farms', {
         method: 'GET',
         token,
       });
@@ -148,12 +241,12 @@ export default function HomeScreen() {
       setNearbyFarms(
         sourceFarms.map((farm) => ({
           ...farm,
-          displayName: farm?.name || 'Luzon Aloe Garden',
+          displayName: farm?.name || 'Philippine Aloe Garden',
           distanceKm: Number.POSITIVE_INFINITY,
         }))
       );
     } catch (error) {
-      setFarmsError(error.message || 'Failed to refresh Luzon garden data.');
+      setFarmsError(error.message || 'Failed to refresh Philippines farm data.');
     }
   }, [token]);
 
@@ -204,6 +297,49 @@ export default function HomeScreen() {
       longitudeDelta: lngDelta,
     };
   }, [farmMarkers, mapRegionOverride]);
+
+  const leafletMarkers = useMemo(
+    () =>
+      farmMarkers.map((farm) => ({
+        lat: Number(farm.coordinates.lat),
+        lng: Number(farm.coordinates.lng),
+        name: farm.displayName || farm.name,
+        region: farm.region || 'Philippines',
+      })),
+    [farmMarkers]
+  );
+
+  const mapCenter = useMemo(() => {
+    if (!mapRegion) return null;
+    return {
+      lat: Number(mapRegion.latitude),
+      lng: Number(mapRegion.longitude),
+    };
+  }, [mapRegion]);
+
+  const leafletZoom = useMemo(() => regionToZoom(mapRegion), [mapRegion]);
+
+  const leafletPreviewHtml = useMemo(() => {
+    if (!mapCenter) return '';
+    return buildLeafletHtml({
+      markers: leafletMarkers,
+      center: mapCenter,
+      zoom: leafletZoom,
+      markerColor: palette.primary.solid,
+      interactive: true,
+    });
+  }, [leafletMarkers, mapCenter, leafletZoom, palette.primary.solid]);
+
+  const leafletModalHtml = useMemo(() => {
+    if (!mapCenter) return '';
+    return buildLeafletHtml({
+      markers: leafletMarkers,
+      center: mapCenter,
+      zoom: leafletZoom,
+      markerColor: palette.primary.solid,
+      interactive: true,
+    });
+  }, [leafletMarkers, mapCenter, leafletZoom, palette.primary.solid]);
 
   return (
     <ScreenContainer padding={false} edges={['bottom']}>
@@ -338,7 +474,7 @@ export default function HomeScreen() {
 
             <AnimatedInView delay={140}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Luzon Aloe Gardens</Text>
+              <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Philippine Aloe Farms & Gardens</Text>
               <TouchableOpacity onPress={refreshGardenPins}>
                 <Text style={[styles.link, { color: palette.primary.solid }]}>
                   {farmsLoading ? 'Loading...' : 'Refresh'}
@@ -349,33 +485,14 @@ export default function HomeScreen() {
             <ElevatedCard style={[styles.mapCard, { borderColor: palette.surface.border }]}>
               {mapRegion ? (
                 <View style={[styles.mapCanvas, { borderColor: palette.surface.border }]}>
-                  <MapView
-                    key={`${mapRegion.latitude}-${mapRegion.longitude}-${mapRegion.latitudeDelta}-${mapRegion.longitudeDelta}`}
+                  <WebView
+                    originWhitelist={['*']}
+                    source={{ html: leafletPreviewHtml }}
                     style={StyleSheet.absoluteFill}
-                    initialRegion={mapRegion}
-                    showsCompass={false}
-                    toolbarEnabled={false}
-                    onPress={() => setMapModalVisible(true)}
-                  >
-                    {farmMarkers.map((farm) => (
-                      <Marker
-                        key={`farm-marker-${farm.id}`}
-                        coordinate={{
-                          latitude: Number(farm.coordinates.lat),
-                          longitude: Number(farm.coordinates.lng),
-                        }}
-                        pinColor={palette.primary.solid}
-                      >
-                        <Callout>
-                          <View style={styles.callout}>
-                            <Text style={styles.calloutTitle}>{farm.displayName || farm.name}</Text>
-                            <Text style={styles.calloutMeta}>{farm.region}</Text>
-                            <Text style={styles.calloutMeta}>Luzon, Philippines</Text>
-                          </View>
-                        </Callout>
-                      </Marker>
-                    ))}
-                  </MapView>
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                    showsHorizontalScrollIndicator={false}
+                  />
 
                   <TouchableOpacity
                     style={[styles.expandMapButton, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}
@@ -387,7 +504,7 @@ export default function HomeScreen() {
               ) : (
                 <View style={[styles.mapPlaceholder, { borderColor: palette.surface.border, backgroundColor: `${palette.primary.solid}0F` }]}>
                   <Text style={[styles.mapPlaceholderText, { color: palette.text.secondary }]}>
-                    {farmsLoading ? 'Loading map...' : 'No Luzon garden coordinates available.'}
+                    {farmsLoading ? 'Loading map...' : 'No Philippines farm coordinates available.'}
                   </Text>
                 </View>
               )}
@@ -395,7 +512,7 @@ export default function HomeScreen() {
               {farmsError ? (
                 <Text style={[styles.mapErrorText, { color: palette.status.warning }]}>{farmsError}</Text>
               ) : nearbyFarms.length === 0 ? (
-                <Text style={[styles.mapErrorText, { color: palette.text.secondary }]}>No Luzon gardens available right now.</Text>
+                <Text style={[styles.mapErrorText, { color: palette.text.secondary }]}>No Philippines farms available right now.</Text>
               ) : (
                 <View style={styles.farmList}>
                   {nearbyFarms.slice(0, 3).map((farm) => (
@@ -489,31 +606,18 @@ export default function HomeScreen() {
         <View style={styles.mapModalBackdrop}>
           <View style={[styles.mapModalCard, { backgroundColor: palette.surface.light, borderColor: palette.surface.border }]}>
             <View style={styles.mapModalHeader}>
-              <Text style={[styles.mapModalTitle, { color: palette.text.primary }]}>Nearby Garden Shop Map</Text>
+              <Text style={[styles.mapModalTitle, { color: palette.text.primary }]}>Philippine Aloe Farms & Gardens Map</Text>
               <TouchableOpacity onPress={() => setMapModalVisible(false)}>
                 <Ionicons name="close" size={20} color={palette.text.secondary} />
               </TouchableOpacity>
             </View>
             {mapRegion ? (
-              <MapView
+              <WebView
+                originWhitelist={['*']}
+                source={{ html: leafletModalHtml }}
                 style={styles.mapModalView}
-                initialRegion={mapRegion}
-                showsCompass
-                toolbarEnabled={false}
-              >
-                {farmMarkers.map((farm) => (
-                  <Marker
-                    key={`full-farm-marker-${farm.id}`}
-                    coordinate={{
-                      latitude: Number(farm.coordinates.lat),
-                      longitude: Number(farm.coordinates.lng),
-                    }}
-                    pinColor={palette.primary.solid}
-                    title={farm.displayName || farm.name}
-                    description={farm.region}
-                  />
-                ))}
-              </MapView>
+                scrollEnabled={false}
+              />
             ) : null}
           </View>
         </View>
@@ -734,19 +838,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  callout: {
-    width: 180,
-    paddingVertical: 2,
-  },
-  calloutTitle: {
-    ...typography.bodyBold,
-    color: '#1E2A22',
-  },
-  calloutMeta: {
-    ...typography.caption,
-    color: '#5D6F63',
-    marginTop: 1,
   },
   mapErrorText: {
     ...typography.caption,

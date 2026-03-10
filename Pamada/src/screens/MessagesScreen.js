@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
+  Modal,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -29,6 +32,8 @@ export default function MessagesScreen({ navigation, route }) {
   const [userResults, setUserResults] = useState([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [selectedThread, setSelectedThread] = useState(null);
 
   const myId = user?.id || user?._id;
   const initialUserId = route.params?.userId;
@@ -131,6 +136,71 @@ export default function MessagesScreen({ navigation, route }) {
     }
   };
 
+  const openThreadActions = (thread) => {
+    if (!thread?.user?.id) return;
+    setSelectedThread(thread);
+    setDrawerVisible(true);
+  };
+
+  const closeThreadActions = () => {
+    setDrawerVisible(false);
+    setSelectedThread(null);
+  };
+
+  const selectedThreadId = selectedThread?.user?.id ? String(selectedThread.user.id) : '';
+  const isSelectedMuted = Boolean(selectedThread?.is_muted);
+
+  const handleToggleMute = async () => {
+    if (!selectedThreadId) return;
+    const nextMuted = !isSelectedMuted;
+    try {
+      await apiRequest(`/api/v1/community/messages/${selectedThreadId}/mute`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({ muted: nextMuted }),
+      });
+      setThreads((prev) =>
+        prev.map((thread) =>
+          String(thread?.user?.id) === selectedThreadId
+            ? { ...thread, is_muted: nextMuted }
+            : thread
+        )
+      );
+      closeThreadActions();
+    } catch (error) {
+      closeThreadActions();
+    }
+  };
+
+  const handleDeleteChat = () => {
+    if (!selectedThreadId) return;
+    Alert.alert(
+      'Delete Chat',
+      'This action cannot be undone. Do you want to delete this chat?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiRequest(`/api/v1/community/messages/${selectedThreadId}`, {
+                method: 'DELETE',
+                token,
+              });
+              setThreads((prev) =>
+                prev.filter((thread) => String(thread?.user?.id) !== selectedThreadId)
+              );
+            } catch (error) {
+              // Keep current list if backend delete fails.
+            }
+          },
+        },
+      ]
+    );
+    closeThreadActions();
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -187,6 +257,8 @@ export default function MessagesScreen({ navigation, route }) {
             return (
               <TouchableOpacity
                 style={styles.threadRow}
+                onLongPress={() => !showingUserSearch && openThreadActions(item)}
+                delayLongPress={260}
                 onPress={() =>
                   navigation.navigate('Conversation', {
                     userId: targetUser.id,
@@ -252,6 +324,16 @@ export default function MessagesScreen({ navigation, route }) {
                         {statusLabel}
                       </Text>
                     ) : null}
+                    {!showingUserSearch && Boolean(item?.is_muted) ? (
+                      <Text
+                        style={[
+                          styles.mutedChip,
+                          { color: palette.text.tertiary, borderColor: palette.surface.border },
+                        ]}
+                      >
+                        Muted
+                      </Text>
+                    ) : null}
                     {hasUnread ? <View style={[styles.unreadDot, { backgroundColor: palette.primary.solid }]} /> : null}
                   </View>
                 </View>
@@ -269,6 +351,53 @@ export default function MessagesScreen({ navigation, route }) {
           }
         />
       </View>
+
+      <Modal
+        visible={drawerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeThreadActions}
+      >
+        <Pressable style={styles.drawerBackdrop} onPress={closeThreadActions}>
+          <Pressable
+            style={[
+              styles.drawerSheet,
+              {
+                backgroundColor: palette.surface.light,
+                borderColor: palette.surface.border,
+              },
+            ]}
+            onPress={() => {}}
+          >
+            <View style={[styles.drawerHandle, { backgroundColor: palette.surface.border }]} />
+            <Text style={[styles.drawerTitle, { color: palette.text.primary }]}>Chat Actions</Text>
+
+            <TouchableOpacity
+              style={[styles.drawerAction, { backgroundColor: palette.surface.soft }]}
+              onPress={handleToggleMute}
+            >
+              <Ionicons
+                name={isSelectedMuted ? 'notifications-outline' : 'notifications-off-outline'}
+                size={18}
+                color={palette.text.primary}
+              />
+              <Text style={[styles.drawerActionText, { color: palette.text.primary }]}>
+                {isSelectedMuted ? 'Unmute Chat' : 'Mute Chat'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.drawerAction, { backgroundColor: palette.surface.soft }]}
+              onPress={handleDeleteChat}
+            >
+              <Ionicons name="trash-outline" size={18} color={palette.status.danger} />
+              <Text style={[styles.drawerActionText, { color: palette.status.danger }]}>
+                Delete Chat
+              </Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -364,6 +493,15 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  mutedChip: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   statusText: {
     ...typography.caption,
     fontWeight: '700',
@@ -378,5 +516,42 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.body,
+  },
+  drawerBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  drawerSheet: {
+    borderTopLeftRadius: radius.floating,
+    borderTopRightRadius: radius.floating,
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  drawerHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: radius.pill,
+    marginBottom: spacing.xs,
+  },
+  drawerTitle: {
+    ...typography.bodyBold,
+    marginBottom: spacing.xs,
+  },
+  drawerAction: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  drawerActionText: {
+    ...typography.body,
+    fontWeight: '700',
   },
 });

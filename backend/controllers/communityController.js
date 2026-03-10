@@ -7,6 +7,7 @@ const CommunityComment = require('../models/communityComment');
 const CommunityLike = require('../models/communityLike');
 const CommunityCommentLike = require('../models/communityCommentLike');
 const Message = require('../models/message');
+const MessageThreadPreference = require('../models/messageThreadPreference');
 const Notification = require('../models/notification');
 const { emitToUser, getIO } = require('../socket');
 const { uploadMedia, uploadMediaFromPath, deleteMedia } = require('../services/imageService');
@@ -78,6 +79,22 @@ const createNotification = async ({ userId, type, referenceId, message }) => {
 };
 
 const toIdString = (value) => (value ? String(value) : null);
+
+const buildThreadMuteMap = async (userId, counterpartIds = []) => {
+  const uniqueCounterparts = Array.from(new Set(counterpartIds.filter(Boolean)));
+  if (!uniqueCounterparts.length) return new Map();
+
+  const preferences = await MessageThreadPreference.find({
+    user_id: userId,
+    counterpart_id: { $in: uniqueCounterparts },
+  }).select('counterpart_id muted');
+
+  const muteMap = new Map();
+  preferences.forEach((pref) => {
+    muteMap.set(String(pref.counterpart_id), Boolean(pref.muted));
+  });
+  return muteMap;
+};
 
 const resolveTopLevelParentId = (commentId, parentMap, memo = new Map(), visiting = new Set()) => {
   const key = toIdString(commentId);
@@ -707,7 +724,10 @@ exports.getPublicProfile = asyncHandler(async (req, res) => {
 exports.getThreads = asyncHandler(async (req, res) => {
   const userId = String(req.user.id);
   const messages = await Message.find({
-    $or: [{ sender_id: userId }, { receiver_id: userId }],
+    $and: [
+      { $or: [{ sender_id: userId }, { receiver_id: userId }] },
+      { hidden_for: { $ne: req.user.id } },
+    ],
   })
     .sort({ createdAt: -1 })
     .populate('sender_id receiver_id', 'full_name profile_image');
@@ -736,12 +756,22 @@ exports.getThreads = asyncHandler(async (req, res) => {
     }
   });
 
+  const threadList = Array.from(threadMap.values()).sort(
+    (a, b) => new Date(b.last_message_at) - new Date(a.last_message_at)
+  );
+  const muteMap = await buildThreadMuteMap(
+    req.user.id,
+    threadList.map((thread) => String(thread.user?.id || ''))
+  );
+  const normalizedThreads = threadList.map((thread) => ({
+    ...thread,
+    is_muted: Boolean(muteMap.get(String(thread.user?.id || ''))),
+  }));
+
   res.status(200).json({
     success: true,
     data: {
-      threads: Array.from(threadMap.values()).sort(
-        (a, b) => new Date(b.last_message_at) - new Date(a.last_message_at)
-      ),
+      threads: normalizedThreads,
     },
   });
 });
@@ -786,18 +816,33 @@ exports.getThreadMessages = asyncHandler(async (req, res) => {
   }
 
   await Message.updateMany(
-    { sender_id: otherUserId, receiver_id: userId, read_status: false },
+    {
+      sender_id: otherUserId,
+      receiver_id: userId,
+      read_status: false,
+      hidden_for: { $ne: req.user.id },
+    },
     { $set: { read_status: true } }
   );
 
   const messages = await Message.find({
-    $or: [
-      { sender_id: userId, receiver_id: otherUserId },
-      { sender_id: otherUserId, receiver_id: userId },
+    $and: [
+      {
+        $or: [
+          { sender_id: userId, receiver_id: otherUserId },
+          { sender_id: otherUserId, receiver_id: userId },
+        ],
+      },
+      { hidden_for: { $ne: req.user.id } },
     ],
   })
     .sort({ createdAt: 1 })
     .populate('sender_id receiver_id', 'full_name profile_image');
+
+  const threadPreference = await MessageThreadPreference.findOne({
+    user_id: req.user.id,
+    counterpart_id: otherUserId,
+  }).select('muted');
 
   res.status(200).json({
     success: true,
@@ -811,6 +856,9 @@ exports.getThreadMessages = asyncHandler(async (req, res) => {
         read_status: message.read_status,
         created_at: message.createdAt,
       })),
+      thread_meta: {
+        is_muted: Boolean(threadPreference?.muted),
+      },
     },
   });
 });
@@ -854,14 +902,86 @@ exports.sendMessage = asyncHandler(async (req, res) => {
   emitToUser(receiverId, 'message:new', payload);
   emitToUser(String(req.user.id), 'message:new', payload);
 
-  await createNotification({
-    userId: receiverId,
-    type: 'new_message',
-    referenceId: message._id,
-    message: `New message from ${req.user.full_name}.`,
-  });
+  const receiverThreadPreference = await MessageThreadPreference.findOne({
+    user_id: receiverId,
+    counterpart_id: req.user.id,
+  }).select('muted');
+  const receiverMutedThread = Boolean(receiverThreadPreference?.muted);
+
+  if (!receiverMutedThread) {
+    await createNotification({
+      userId: receiverId,
+      type: 'new_message',
+      referenceId: message._id,
+      message: `New message from ${req.user.full_name}.`,
+    });
+  }
 
   res.status(201).json({ success: true, data: { message: payload } });
+});
+
+exports.setThreadMute = asyncHandler(async (req, res) => {
+  const userId = String(req.user.id);
+  const otherUserId = String(req.params.userId || '');
+  const muted = req.body?.muted !== undefined ? Boolean(req.body.muted) : true;
+
+  if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
+    return res.status(400).json({ success: false, error: 'Invalid user id' });
+  }
+  if (otherUserId === userId) {
+    return res.status(400).json({ success: false, error: 'Cannot mute your own thread' });
+  }
+
+  const otherUser = await User.findById(otherUserId).select('_id');
+  if (!otherUser) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  const preference = await MessageThreadPreference.findOneAndUpdate(
+    { user_id: userId, counterpart_id: otherUserId },
+    { $set: { muted } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  res.status(200).json({
+    success: true,
+    data: {
+      user_id: otherUserId,
+      is_muted: Boolean(preference?.muted),
+    },
+  });
+});
+
+exports.deleteThread = asyncHandler(async (req, res) => {
+  const userId = String(req.user.id);
+  const otherUserId = String(req.params.userId || '');
+
+  if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
+    return res.status(400).json({ success: false, error: 'Invalid user id' });
+  }
+  if (otherUserId === userId) {
+    return res.status(400).json({ success: false, error: 'Cannot delete your own self-thread' });
+  }
+
+  await Message.updateMany(
+    {
+      $or: [
+        { sender_id: userId, receiver_id: otherUserId },
+        { sender_id: otherUserId, receiver_id: userId },
+      ],
+    },
+    { $addToSet: { hidden_for: req.user.id } }
+  );
+
+  await MessageThreadPreference.deleteOne({
+    user_id: userId,
+    counterpart_id: otherUserId,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Thread deleted for this account',
+  });
 });
 
 exports.listNotifications = asyncHandler(async (req, res) => {

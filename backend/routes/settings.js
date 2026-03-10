@@ -14,6 +14,7 @@ const {
   createSupportTicket,
   getAbout,
   getLuzonGardens,
+  getPhilippinesFarms,
   getHomeHeroMedia,
 } = require('../controllers/settingsController');
 
@@ -41,6 +42,7 @@ router.route('/help')
 
 router.get('/about', getAbout);
 router.get('/luzon-gardens', getLuzonGardens);
+router.get('/philippines-farms', getPhilippinesFarms);
 router.get('/home-hero-media', getHomeHeroMedia);
 
 module.exports = router;

@@ -44,7 +44,6 @@ app.use('/api/v1/plants', require('./routes/plants'));
 app.use('/api/v1/scans', require('./routes/scans'));
 app.use('/api/v1/diseases', require('./routes/diseases'));
 app.use('/api/v1/analytics', require('./routes/analytics'));
-app.use('/api/v1/training', require('./routes/training'));
 app.use('/api/v1/settings', require('./routes/settings'));
 app.use('/api/v1/community', require('./routes/community'));
 

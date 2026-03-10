@@ -19,6 +19,8 @@ const {
   searchUsers,
   getThreadMessages,
   sendMessage,
+  setThreadMute,
+  deleteThread,
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
@@ -46,6 +48,8 @@ router.get('/messages/threads', getThreads);
 router.get('/messages/users', searchUsers);
 router.get('/messages/:userId', getThreadMessages);
 router.post('/messages/:userId', messageLimiter, sendMessage);
+router.put('/messages/:userId/mute', setThreadMute);
+router.delete('/messages/:userId', deleteThread);
 
 router.get('/notifications', listNotifications);
 router.put('/notifications/read-all', markAllNotificationsRead);

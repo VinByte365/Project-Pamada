@@ -24,6 +24,13 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    hidden_for: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        index: true,
+      },
+    ],
   },
   {
     timestamps: true,

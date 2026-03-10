@@ -6,7 +6,7 @@ const API_PORT = 8000;
 const DEV_HOST_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || '').trim();
 // Optional fallback target (LAN). Example: 'http://192.168.1.100:8000'
 const FALLBACK_LAN_HOST_URL =
-  (process.env.EXPO_PUBLIC_API_FALLBACK_BASE_URL || 'http://192.168.175.89:8000').trim();
+  (process.env.EXPO_PUBLIC_API_FALLBACK_BASE_URL).trim();
 
 /**
  * API base URL for the Express backend.
