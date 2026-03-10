@@ -98,9 +98,7 @@ export default function HistoryScreen() {
 
   const openHarvestGuide = () => {
     if (!selectedScan) return;
-    navigation.navigate('Chatbot', {
-      prefill: 'My aloe vera is ready for harvest. What steps should I follow?',
-    });
+    navigation.navigate('HarvestGuide');
   };
 
   const toggleSection = (key) => {
