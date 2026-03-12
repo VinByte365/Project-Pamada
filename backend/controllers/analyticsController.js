@@ -306,9 +306,21 @@ exports.getSummary = asyncHandler(async (req, res) => {
     'current_status.lifecycle_stage': 'harvested'
   });
 
+  const diseasedConditions = [
+    'leaf_spot',
+    'root_rot',
+    'sunburn',
+    'aloe_rust',
+    'bacterial_soft_rot',
+    'anthracnose',
+    'scale_insect',
+    'mealybug',
+    'spider_mite',
+  ];
+
   const diseasedPlants = await Plant.countDocuments({
     owner_id: req.user.id,
-    'current_status.disease_severity': { $ne: 'none' }
+    'current_status.primary_condition': { $in: diseasedConditions },
   });
 
   const plants = await Plant.find({ owner_id: req.user.id }).select('current_status');
