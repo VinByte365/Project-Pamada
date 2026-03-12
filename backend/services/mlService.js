@@ -180,7 +180,14 @@ class MLService {
       .trim()
       .toLowerCase();
     const stageLower = maturity_data?.maturity_stage?.toLowerCase() || '';
-    const noPlantDetected = stageLower.includes('no plant detected');
+    const parsedConfidence = Number(
+      mlResults?.confidence ??
+      mlResults?.disease_result?.confidence ??
+      confidence_score ??
+      0
+    );
+    const invalidConfidence = !Number.isFinite(parsedConfidence) || parsedConfidence <= 0;
+    const noPlantDetected = stageLower.includes('no plant detected') || invalidConfidence;
 
     if (noPlantDetected) {
       return {
@@ -265,7 +272,7 @@ class MLService {
       disease_severity: diseaseSeverity,
       recommended_action: recommendedAction,
       estimated_days_to_harvest: estimatedDays,
-      confidence_score: confidence_score || 0.5,
+      confidence_score: Number.isFinite(parsedConfidence) ? parsedConfidence : 0.5,
       recommendations: {
         treatment_plan: [],
         preventive_measures: [],
@@ -353,4 +360,3 @@ class MLService {
 }
 
 module.exports = new MLService();
-
