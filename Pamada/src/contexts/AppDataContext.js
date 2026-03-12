@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../utils/api';
 import { useAuth } from './AuthContext';
 
@@ -410,13 +410,18 @@ export function AppDataProvider({ children }) {
     return response?.data || null;
   };
 
-  const setScanProgress = (scanId, completionRate) => {
+  const setScanProgress = useCallback((scanId, completionRate) => {
     if (!scanId) return;
-    setProgressMap((prev) => ({
-      ...prev,
-      [String(scanId)]: typeof completionRate === 'number' ? completionRate : 0,
-    }));
-  };
+    const key = String(scanId);
+    const nextValue = typeof completionRate === 'number' ? completionRate : 0;
+    setProgressMap((prev) => {
+      if (prev[key] === nextValue) return prev;
+      return {
+        ...prev,
+        [key]: nextValue,
+      };
+    });
+  }, []);
 
   const loadScanProgress = async (scanIds = []) => {
     if (!token || !scanIds.length) return;
