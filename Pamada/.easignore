@@ -1,0 +1,9 @@
+inspect
+dist
+.tmp-debugger
+*.tgz
+react-native-debugger-frontend-0.81.5.tgz
+node_modules
+.vscode
+.expo
+*.log

@@ -1,13 +1,13 @@
 {
   "expo": {
     "name": "Pamada",
-    "slug": "Pamada",
+    "slug": "aloe-app",
     "scheme": "pamada",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/aloe-vera.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain"
@@ -28,8 +28,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "2968acc0-7003-4173-9494-bdf77878f9e8"
+        "projectId": "e142b09c-d394-4c55-8838-260fc998b952"
       }
-    }
+    },
+    "owner": "kjin53321s-organization"
   }
 }

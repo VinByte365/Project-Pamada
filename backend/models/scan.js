@@ -41,8 +41,11 @@ const scanSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+    optimized_url: String,
     annotated_url: String,
     thumbnail_url: String,
+    public_id: String,
+    resource_type: String,
     file_size: Number,
     dimensions: {
       width: Number,

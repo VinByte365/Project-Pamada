@@ -10,7 +10,14 @@ const Message = require('../models/message');
 const MessageThreadPreference = require('../models/messageThreadPreference');
 const Notification = require('../models/notification');
 const { emitToUser, getIO } = require('../socket');
-const { uploadMedia, uploadMediaFromPath, deleteMedia } = require('../services/imageService');
+const {
+  uploadMedia,
+  uploadMediaFromPath,
+  deleteMedia,
+  generateOptimizedImageUrl,
+  generateOptimizedVideoUrl,
+  generateVideoPosterUrl,
+} = require('../services/imageService');
 
 const BLOCKED_WORDS = [
   'fuck',
@@ -32,12 +39,37 @@ const containsBlockedWord = (text = '') => {
   });
 };
 
-const toUserSummary = (user) => ({
-  id: user?._id || user?.id,
-  full_name: user?.full_name || 'Unknown',
-  profile_image_url: user?.profile_image?.url || '',
-  cover_image_url: user?.cover_image?.url || '',
-});
+const toUserSummary = (user) => {
+  const profilePublicId = user?.profile_image?.public_id || '';
+  const coverPublicId = user?.cover_image?.public_id || '';
+  return {
+    id: user?._id || user?.id,
+    full_name: user?.full_name || 'Unknown',
+    profile_image_url: user?.profile_image?.url || '',
+    profile_image_optimized_url: profilePublicId
+      ? generateOptimizedImageUrl(profilePublicId, { width: 320 })
+      : user?.profile_image?.url || '',
+    cover_image_url: user?.cover_image?.url || '',
+    cover_image_optimized_url: coverPublicId
+      ? generateOptimizedImageUrl(coverPublicId, { width: 1280 })
+      : user?.cover_image?.url || '',
+  };
+};
+
+const buildMediaVariants = (post) => {
+  const publicId = post?.media_public_id || '';
+  if (!publicId) return { optimized_url: '', poster_url: '' };
+  if (post?.media_type === 'video') {
+    return {
+      optimized_url: generateOptimizedVideoUrl(publicId),
+      poster_url: generateVideoPosterUrl(publicId),
+    };
+  }
+  return {
+    optimized_url: generateOptimizedImageUrl(publicId, { width: 1280 }),
+    poster_url: '',
+  };
+};
 
 const canSendNotification = (preferences = {}, type) => {
   if (preferences.notification_enabled === false) return false;
@@ -218,12 +250,15 @@ const enrichPosts = async (posts, viewerId) => {
   return posts.map((post) => {
     const postId = post._id.toString();
     const postComments = postCommentMap.get(postId) || [];
+    const variants = buildMediaVariants(post);
     return {
       id: post._id,
       user: toUserSummary(post.user_id),
       content: post.content,
       media_url: post.media_url || '',
       media_type: post.media_type || '',
+      media_optimized_url: variants.optimized_url || '',
+      media_poster_url: variants.poster_url || '',
       created_at: post.createdAt,
       is_owner: String(post.user_id?._id || post.user_id) === String(viewerId),
       likes_count: likeMap.get(postId) || 0,
@@ -249,7 +284,7 @@ exports.listPosts = asyncHandler(async (req, res) => {
 });
 
 exports.createPost = asyncHandler(async (req, res) => {
-  const content = String(req.body.content || '').trim();
+  const content = String(req.body.content ?? req.body.caption ?? '').trim();
   const media_url_input = String(req.body.media_url || '').trim();
 
   if (!content && !req.file && !media_url_input) {

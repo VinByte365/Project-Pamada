@@ -3,6 +3,7 @@ const Notification = require('../models/notification');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/controllerWrapper');
 const { emitToUser } = require('../socket');
+const { generateOptimizedImageUrl } = require('../services/imageService');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -42,6 +43,9 @@ exports.register = asyncHandler(async (req, res) => {
 
   const token = generateToken(user._id);
 
+  const profilePublicId = user.profile_image?.public_id || '';
+  const coverPublicId = user.cover_image?.public_id || '';
+
   res.status(201).json({
     success: true,
     data: {
@@ -54,7 +58,13 @@ exports.register = asyncHandler(async (req, res) => {
         phone: user.phone || '',
         preferences: user.preferences,
         profile_image: user.profile_image,
-        cover_image: user.cover_image
+        cover_image: user.cover_image,
+        profile_image_optimized_url: profilePublicId
+          ? generateOptimizedImageUrl(profilePublicId, { width: 320 })
+          : user.profile_image?.url || '',
+        cover_image_optimized_url: coverPublicId
+          ? generateOptimizedImageUrl(coverPublicId, { width: 1280 })
+          : user.cover_image?.url || ''
       },
       token
     }
@@ -66,7 +76,7 @@ exports.register = asyncHandler(async (req, res) => {
 // @access  Public
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-
+  console.log('Login attempt:', email);
   // Validate email & password
   if (!email || !password) {
     return res.status(400).json({
@@ -133,6 +143,9 @@ exports.login = asyncHandler(async (req, res) => {
 
   const token = generateToken(user._id);
 
+  const profilePublicId = user.profile_image?.public_id || '';
+  const coverPublicId = user.cover_image?.public_id || '';
+
   res.status(200).json({
     success: true,
     data: {
@@ -145,7 +158,13 @@ exports.login = asyncHandler(async (req, res) => {
         phone: user.phone || '',
         preferences: user.preferences,
         profile_image: user.profile_image,
-        cover_image: user.cover_image
+        cover_image: user.cover_image,
+        profile_image_optimized_url: profilePublicId
+          ? generateOptimizedImageUrl(profilePublicId, { width: 320 })
+          : user.profile_image?.url || '',
+        cover_image_optimized_url: coverPublicId
+          ? generateOptimizedImageUrl(coverPublicId, { width: 1280 })
+          : user.cover_image?.url || ''
       },
       token
     }

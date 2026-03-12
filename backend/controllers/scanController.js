@@ -1,7 +1,11 @@
 const Scan = require('../models/scan');
 const Plant = require('../models/plant');
 const mongoose = require('mongoose');
-const { uploadImage, generateThumbnail } = require('../services/imageService');
+const {
+  uploadImage,
+  generateThumbnail,
+  generateOptimizedImageUrl,
+} = require('../services/imageService');
 const { processScanAsync, processScanAnalysis } = require('../services/scanAnalysisService');
 const mlService = require('../services/mlService');
 const aloeVerificationService = require('../services/aloeVerificationService');
@@ -349,6 +353,7 @@ exports.createScan = asyncHandler(async (req, res) => {
   
   // Generate thumbnail
   const thumbnailUrl = await generateThumbnail(uploadResult.public_id);
+  const optimizedUrl = generateOptimizedImageUrl(uploadResult.public_id);
 
   // Create scan record (ML analysis will be added later)
   const scanCount = await Scan.countDocuments({ user_id: req.user.id });
@@ -358,7 +363,10 @@ exports.createScan = asyncHandler(async (req, res) => {
     scan_number: scanCount + 1,
     image_data: {
       original_url: uploadResult.secure_url,
+      optimized_url: optimizedUrl,
       thumbnail_url: thumbnailUrl,
+      public_id: uploadResult.public_id,
+      resource_type: uploadResult.resource_type || 'image',
       file_size: req.file.size,
       dimensions: {
         width: uploadResult.width,
@@ -494,6 +502,7 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
 
   const uploadResult = await uploadImage(req.file.buffer, 'aloe-vera-scans');
   const thumbnailUrl = await generateThumbnail(uploadResult.public_id);
+  const optimizedUrl = generateOptimizedImageUrl(uploadResult.public_id);
 
   const previewId = createPreviewId();
   setPreview(previewId, {
@@ -501,7 +510,10 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
     plant_id: String(plant._id),
     image_data: {
       original_url: uploadResult.secure_url,
+      optimized_url: optimizedUrl,
       thumbnail_url: thumbnailUrl,
+      public_id: uploadResult.public_id,
+      resource_type: uploadResult.resource_type || 'image',
       file_size: req.file.size,
       dimensions: {
         width: uploadResult.width,
@@ -526,7 +538,10 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
       preview_id: previewId,
       image_data: {
         original_url: uploadResult.secure_url,
+        optimized_url: optimizedUrl,
         thumbnail_url: thumbnailUrl,
+        public_id: uploadResult.public_id,
+        resource_type: uploadResult.resource_type || 'image',
       },
       yolo_predictions: mlResults.yolo_predictions || [],
       visual_features: mlResults.visual_features || {},

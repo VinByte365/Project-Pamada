@@ -1,6 +1,35 @@
 const cloudinary = require('../config/cloudinary');
 const { Readable } = require('stream');
 
+const defaultImageTransform = {
+  quality: 'auto',
+  fetch_format: 'auto',
+  dpr: 'auto',
+};
+
+const buildImageUrl = (publicId, overrides = {}) =>
+  cloudinary.url(publicId, {
+    transformation: [
+      {
+        ...defaultImageTransform,
+        ...overrides,
+      },
+    ],
+  });
+
+const buildVideoUrl = (publicId, overrides = {}) =>
+  cloudinary.url(publicId, {
+    resource_type: 'video',
+    transformation: [
+      {
+        quality: 'auto',
+        fetch_format: 'auto',
+        video_codec: 'auto',
+        ...overrides,
+      },
+    ],
+  });
+
 // Upload image to Cloudinary
 exports.uploadImage = async (buffer, folder = 'aloe-vera-scans') => {
   return new Promise((resolve, reject) => {
@@ -89,10 +118,52 @@ exports.uploadMediaFromPath = async (
 
 // Generate thumbnail
 exports.generateThumbnail = async (publicId) => {
+  return buildImageUrl(publicId, {
+    width: 300,
+    height: 300,
+    crop: 'fill',
+    gravity: 'auto',
+  });
+};
+
+exports.generateOptimizedImageUrl = (publicId, options = {}) => {
+  if (!publicId) return '';
+  return buildImageUrl(publicId, {
+    width: options.width || 1280,
+    crop: options.crop || 'limit',
+  });
+};
+
+exports.generatePreviewImageUrl = (publicId, options = {}) => {
+  if (!publicId) return '';
+  return buildImageUrl(publicId, {
+    width: options.width || 720,
+    crop: options.crop || 'limit',
+  });
+};
+
+exports.generateOptimizedVideoUrl = (publicId, options = {}) => {
+  if (!publicId) return '';
+  return buildVideoUrl(publicId, {
+    width: options.width || 1280,
+    crop: options.crop || 'limit',
+  });
+};
+
+exports.generateVideoPosterUrl = (publicId, options = {}) => {
+  if (!publicId) return '';
   return cloudinary.url(publicId, {
+    resource_type: 'video',
+    format: 'jpg',
     transformation: [
-      { width: 300, height: 300, crop: 'fill', quality: 'auto' }
-    ]
+      {
+        quality: 'auto',
+        fetch_format: 'auto',
+        start_offset: 'auto',
+        width: options.width || 640,
+        crop: options.crop || 'limit',
+      },
+    ],
   });
 };
 

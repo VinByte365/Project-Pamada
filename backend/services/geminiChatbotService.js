@@ -18,7 +18,7 @@ const {
 
 // Store chat sessions per user (in production, use database)
 const activeSessions = new Map();
-const OFF_TOPIC_RESPONSE = 'That’s outside my focus. I’m designed to answer aloe vera–related questions only. Please ask something about aloe vera care, growth, or use.';
+const OFF_TOPIC_RESPONSE = `That's outside my focus. I'm designed to answer aloe vera-related questions only. Please ask something about aloe vera care, growth, or use.`;
 
 /**
  * Check if response is safe and on-topic

@@ -1,7 +1,11 @@
 const User = require('../models/user');
 const SupportTicket = require('../models/supportTicket');
 const asyncHandler = require('../utils/controllerWrapper');
-const { uploadImage, deleteImage } = require('../services/imageService');
+const {
+  uploadImage,
+  deleteImage,
+  generateOptimizedImageUrl,
+} = require('../services/imageService');
 
 const SETTINGS_VERSION = '1.0.0';
 const ISSUE_CATEGORIES = [
@@ -108,6 +112,8 @@ const nextTicketNumber = async () => {
 
 exports.getAccountSettings = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
+  const profilePublicId = user.profile_image?.public_id || '';
+  const coverPublicId = user.cover_image?.public_id || '';
 
   res.status(200).json({
     success: true,
@@ -117,7 +123,13 @@ exports.getAccountSettings = asyncHandler(async (req, res) => {
         email: user.email,
         phone: user.phone || '',
         profile_image_url: user.profile_image?.url || '',
+        profile_image_optimized_url: profilePublicId
+          ? generateOptimizedImageUrl(profilePublicId, { width: 320 })
+          : user.profile_image?.url || '',
         cover_image_url: user.cover_image?.url || '',
+        cover_image_optimized_url: coverPublicId
+          ? generateOptimizedImageUrl(coverPublicId, { width: 1280 })
+          : user.cover_image?.url || '',
         language: user.preferences?.language || 'en',
         location: user.preferences?.location || '',
         farm_size: user.preferences?.farm_size || ''
@@ -150,6 +162,9 @@ exports.updateAccountSettings = asyncHandler(async (req, res) => {
   user.preferences = nextPreferences;
   await user.save();
 
+  const profilePublicId = user.profile_image?.public_id || '';
+  const coverPublicId = user.cover_image?.public_id || '';
+
   res.status(200).json({
     success: true,
     data: {
@@ -158,7 +173,13 @@ exports.updateAccountSettings = asyncHandler(async (req, res) => {
         email: user.email,
         phone: user.phone || '',
         profile_image_url: user.profile_image?.url || '',
+        profile_image_optimized_url: profilePublicId
+          ? generateOptimizedImageUrl(profilePublicId, { width: 320 })
+          : user.profile_image?.url || '',
         cover_image_url: user.cover_image?.url || '',
+        cover_image_optimized_url: coverPublicId
+          ? generateOptimizedImageUrl(coverPublicId, { width: 1280 })
+          : user.cover_image?.url || '',
         language: user.preferences?.language || 'en',
         location: user.preferences?.location || '',
         farm_size: user.preferences?.farm_size || ''
@@ -196,6 +217,9 @@ exports.updateAccountAvatar = asyncHandler(async (req, res) => {
     success: true,
     data: {
       profile_image_url: user.profile_image.url,
+      profile_image_optimized_url: user.profile_image.public_id
+        ? generateOptimizedImageUrl(user.profile_image.public_id, { width: 320 })
+        : user.profile_image.url,
       user
     },
     message: 'Profile image updated successfully'
@@ -229,6 +253,9 @@ exports.updateAccountCover = asyncHandler(async (req, res) => {
     success: true,
     data: {
       cover_image_url: user.cover_image.url,
+      cover_image_optimized_url: user.cover_image.public_id
+        ? generateOptimizedImageUrl(user.cover_image.public_id, { width: 1280 })
+        : user.cover_image.url,
       user
     },
     message: 'Cover image updated successfully'
