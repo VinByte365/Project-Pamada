@@ -301,37 +301,36 @@ exports.getSummary = asyncHandler(async (req, res) => {
     'current_status.harvest_ready': true
   });
 
+  const harvestedPlants = await Plant.countDocuments({
+    owner_id: req.user.id,
+    'current_status.lifecycle_stage': 'harvested'
+  });
+
   const diseasedPlants = await Plant.countDocuments({
     owner_id: req.user.id,
     'current_status.disease_severity': { $ne: 'none' }
   });
 
-  const latestScans = await Scan.aggregate([
-    { $match: { user_id: req.user.id } },
-    { $sort: { createdAt: -1 } },
-    {
-      $group: {
-        _id: '$plant_id',
-        analysis_result: { $first: '$analysis_result' },
-        disease_key: { $first: '$disease_key' },
-        yolo_predictions: { $first: '$yolo_predictions' },
-      },
-    },
-  ]);
+  const plants = await Plant.find({ owner_id: req.user.id }).select('current_status');
+  const maturityScores = plants.map((plant) => {
+    const status = plant.current_status || {};
+    if (status.harvest_ready) return 100;
+    const days = Number(status.estimated_days_to_harvest);
+    if (Number.isFinite(days)) {
+      const maxDays = 90;
+      const score = Math.max(0, Math.min(100, 100 - (days / maxDays) * 100));
+      return score;
+    }
+    return 0;
+  });
+  const avgMaturityRate =
+    maturityScores.length > 0
+      ? maturityScores.reduce((sum, score) => sum + score, 0) / maturityScores.length
+      : 0;
 
-  const scanBasedDiseasedPlants = latestScans.reduce((count, scan) => {
-    const diseaseDetected = scan?.analysis_result?.disease_detected === true;
-    const diseaseKey = String(scan?.disease_key || '').toLowerCase();
-    const topClass = String(scan?.yolo_predictions?.[0]?.class || '').toLowerCase();
-    const diseased = diseaseDetected ||
-      (diseaseKey && diseaseKey !== 'healthy') ||
-      (topClass && topClass !== 'healthy');
-    return count + (diseased ? 1 : 0);
-  }, 0);
-
-  const totalPlantsAdjusted = totalPlants > 0 ? totalPlants : latestScans.length;
-  const diseasedPlantsAdjusted = Math.max(diseasedPlants, scanBasedDiseasedPlants);
-  const healthyPlantsAdjusted = Math.max(0, totalPlantsAdjusted - diseasedPlantsAdjusted);
+  const healthyPlantsAdjusted = Math.max(0, totalPlants - diseasedPlants);
+  const harvestRate = totalPlants > 0 ? (harvestedPlants / totalPlants) * 100 : 0;
+  const diseaseRate = totalPlants > 0 ? (diseasedPlants / totalPlants) * 100 : 0;
 
   const recentScans = await Scan.find({ user_id: req.user.id })
     .sort({ createdAt: -1 })
@@ -342,10 +341,14 @@ exports.getSummary = asyncHandler(async (req, res) => {
     success: true,
     data: {
       summary: {
-        total_plants: totalPlantsAdjusted,
+        total_plants: totalPlants,
         total_scans: totalScans,
         harvest_ready: harvestReadyPlants,
-        diseased_plants: diseasedPlantsAdjusted,
+        harvested_plants: harvestedPlants,
+        diseased_plants: diseasedPlants,
+        harvest_rate: harvestRate,
+        disease_rate: diseaseRate,
+        avg_maturity_rate: avgMaturityRate,
         healthy_plants: healthyPlantsAdjusted
       },
       recent_scans: recentScans

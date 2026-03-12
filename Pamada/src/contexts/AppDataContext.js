@@ -217,8 +217,12 @@ export function AppDataProvider({ children }) {
 
     recent.forEach((scan) => upsertScan(scan));
 
-    const harvestRate = totalPlants > 0 ? Math.round((harvestReady / totalPlants) * 100) : 0;
-    const diseaseRate = totalPlants > 0 ? Math.round((diseasedPlants / totalPlants) * 100) : 0;
+    const harvestRate = summaryData.harvest_rate !== undefined
+      ? Math.round(Number(summaryData.harvest_rate || 0))
+      : (totalPlants > 0 ? Math.round((harvestReady / totalPlants) * 100) : 0);
+    const diseaseRate = summaryData.disease_rate !== undefined
+      ? Math.round(Number(summaryData.disease_rate || 0))
+      : (totalPlants > 0 ? Math.round((diseasedPlants / totalPlants) * 100) : 0);
 
     setAnalytics((prev) => ({
       ...prev,
@@ -260,11 +264,18 @@ export function AppDataProvider({ children }) {
   const refreshAnalytics = async () => {
     if (!token) return;
     try {
-      const weekly = await apiRequest('/api/v1/analytics/weekly', {
-        method: 'GET',
-        token,
-      });
+      const [weekly, summary] = await Promise.all([
+        apiRequest('/api/v1/analytics/weekly', {
+          method: 'GET',
+          token,
+        }),
+        apiRequest('/api/v1/analytics/summary', {
+          method: 'GET',
+          token,
+        }),
+      ]);
       const metrics = weekly?.data?.metrics || {};
+      const summaryData = summary?.data?.summary || {};
       const condition = metrics.condition_distribution || {};
       const total = Object.values(condition).reduce((acc, value) => acc + value, 0) || 0;
       const distribution = Object.entries(condition)
@@ -278,7 +289,7 @@ export function AppDataProvider({ children }) {
 
       setAnalytics((prev) => ({
         ...prev,
-        avgMaturity: `${Math.round(metrics.avg_health_score || 0)}%`,
+        avgMaturity: `${Math.round((summaryData.avg_maturity_rate ?? metrics.avg_health_score) || 0)}%`,
         diseaseDistribution: distribution,
       }));
     } catch (error) {
