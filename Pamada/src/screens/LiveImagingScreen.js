@@ -73,6 +73,7 @@ export default function LiveImagingScreen() {
   const [engineError, setEngineError] = useState('');
   const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
   const [detections, setDetections] = useState([]);
+  const [flashEnabled, setFlashEnabled] = useState(false);
   const [lastResult, setLastResult] = useState({
     disease: '',
     maturity: '',
@@ -198,6 +199,7 @@ export default function LiveImagingScreen() {
         style={StyleSheet.absoluteFill}
         facing="back"
         animateShutter={false}
+        enableTorch={flashEnabled}
         onLayout={(event) => {
           const { width, height } = event.nativeEvent.layout;
           setPreviewSize({ width, height });
@@ -233,6 +235,14 @@ export default function LiveImagingScreen() {
             Confidence: {detections.length ? `${Math.round((lastResult.confidence || 0) * 100)}%` : '--'}
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => setFlashEnabled((prev) => !prev)}
+          accessibilityLabel={flashEnabled ? 'Turn off flash' : 'Turn on flash'}
+        >
+          <Ionicons name={flashEnabled ? 'flash' : 'flash-off'} size={18} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.statusBar}>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -33,9 +33,18 @@ export default function CaptureImageScanScreen() {
   const [scanResult, setScanResult] = useState(null);
   const [error, setError] = useState('');
   const [liveConfidence, setLiveConfidence] = useState('AI Ready');
+  const [flashEnabled, setFlashEnabled] = useState(false);
   const [savingRecord, setSavingRecord] = useState(false);
   const [previewId, setPreviewId] = useState('');
   const cameraRef = useRef(null);
+
+  const flashAvailable = facing === 'back';
+
+  useEffect(() => {
+    if (!flashAvailable && flashEnabled) {
+      setFlashEnabled(false);
+    }
+  }, [flashAvailable, flashEnabled]);
 
   if (!permission) {
     return <View style={{ flex: 1 }} />;
@@ -222,26 +231,59 @@ export default function CaptureImageScanScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: palette.background.base }]}> 
+    <View style={[styles.container, { backgroundColor: palette.background.base }]}>
       {!scannedImage ? (
-        <CameraView style={styles.cameraView} facing={facing} ref={cameraRef}>
+        <CameraView style={styles.cameraView} facing={facing} ref={cameraRef} enableTorch={flashEnabled}>
           <LinearGradient
-            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.45)']}
+            colors={['rgba(6,18,10,0.6)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.65)']}
+            locations={[0, 0.45, 1]}
             style={StyleSheet.absoluteFill}
           />
           <ScanFrameOverlay confidence={liveConfidence} />
 
-          <View style={styles.topGlassWrap}>
-            <View style={[styles.topGlass, { backgroundColor: palette.surface.glass, borderColor: palette.surface.borderStrong }]}>
-              <Ionicons name="leaf-outline" size={18} color={palette.primary.solid} />
-              <Text style={[styles.topGlassText, { color: palette.text.primary }]}>Smart Scan Mode</Text>
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={[styles.iconButton, { backgroundColor: 'rgba(14,18,16,0.6)' }]}
+              onPress={() => navigation.goBack()}
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.topTitle}>
+              <Text style={styles.topTitleText}>Capture Scan</Text>
+              <Text style={styles.topSubtitle}>Align one aloe leaf within the frame</Text>
+            </View>
+            <View style={styles.topActions}>
+              <View style={[styles.statusPill, { borderColor: 'rgba(255,255,255,0.3)' }]}>
+                <View style={[styles.statusDot, { backgroundColor: liveConfidence === 'AI Ready' ? '#6EE7B7' : '#FBBF24' }]} />
+                <Text style={styles.statusText}>{liveConfidence}</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: 'rgba(14,18,16,0.6)', opacity: flashAvailable ? 1 : 0.5 },
+                ]}
+                onPress={() => setFlashEnabled((prev) => !prev)}
+                accessibilityLabel={flashEnabled ? 'Turn off flash' : 'Turn on flash'}
+                disabled={!flashAvailable}
+              >
+                <Ionicons name={flashEnabled ? 'flash' : 'flash-off'} size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.hintWrap}>
+            <View style={[styles.hintCard, { backgroundColor: 'rgba(10,14,12,0.6)', borderColor: 'rgba(255,255,255,0.2)' }]}>
+              <Ionicons name="sparkles-outline" size={16} color="#B7F5C2" />
+              <Text style={styles.hintText}>Good light and a steady hand improve detection accuracy.</Text>
             </View>
           </View>
 
           <View style={styles.controlsWrap}>
-            <View style={[styles.controls, { backgroundColor: 'rgba(16,20,18,0.72)', borderColor: 'rgba(255,255,255,0.2)' }]}>
+            <View style={[styles.controls, { backgroundColor: 'rgba(12,16,14,0.78)', borderColor: 'rgba(255,255,255,0.2)' }]}>
               <TouchableOpacity style={styles.controlButton} onPress={pickImage} accessibilityLabel="Pick image">
-                <Ionicons name="images-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="images-outline" size={22} color="#FFFFFF" />
+                <Text style={styles.controlLabel}>Gallery</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -259,7 +301,8 @@ export default function CaptureImageScanScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.controlButton} onPress={toggleCameraFacing} accessibilityLabel="Switch camera">
-                <Ionicons name="camera-reverse-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="camera-reverse-outline" size={22} color="#FFFFFF" />
+                <Text style={styles.controlLabel}>Flip</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -446,22 +489,79 @@ const styles = StyleSheet.create({
   cameraView: {
     flex: 1,
   },
-  topGlassWrap: {
+  topBar: {
     position: 'absolute',
-    top: 68,
-    alignSelf: 'center',
+    top: 56,
+    left: spacing.md,
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  topGlass: {
-    minHeight: 36,
-    borderWidth: 1,
-    borderRadius: radius.pill,
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topTitle: {
+    flex: 1,
+  },
+  topActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
   },
-  topGlassText: {
+  topTitleText: {
+    ...typography.bodyBold,
+    color: '#FFFFFF',
+  },
+  topSubtitle: {
     ...typography.caption,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  statusPill: {
+    minHeight: 28,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    backgroundColor: 'rgba(14,18,16,0.6)',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    ...typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  hintWrap: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: 150,
+    alignItems: 'center',
+  },
+  hintCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  hintText: {
+    ...typography.caption,
+    color: '#E6F6EC',
+    flex: 1,
+    lineHeight: 16,
   },
   controlsWrap: {
     position: 'absolute',
@@ -472,21 +572,26 @@ const styles = StyleSheet.create({
   },
   controls: {
     width: '90%',
-    minHeight: 92,
+    minHeight: 96,
     borderRadius: radius.floating,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 72,
+    height: 68,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
+    gap: 4,
+  },
+  controlLabel: {
+    ...typography.caption,
+    color: '#FFFFFF',
   },
   captureButton: {
     width: 82,
