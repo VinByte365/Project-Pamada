@@ -31,6 +31,9 @@
         "projectId": "e142b09c-d394-4c55-8838-260fc998b952"
       }
     },
-    "owner": "kjin53321s-organization"
+    "owner": "kjin53321s-organization",
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }

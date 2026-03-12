@@ -21,6 +21,8 @@ import ElevatedCard from '../components/ui/ElevatedCard';
 import ScanFrameOverlay from '../components/ui/ScanFrameOverlay';
 import StatusBadge from '../components/ui/StatusBadge';
 
+const CONFIDENCE_THRESHOLD = 0.45;
+
 export default function CaptureImageScanScreen() {
   const navigation = useNavigation();
   const { palette } = useAppTheme();
@@ -103,12 +105,15 @@ export default function CaptureImageScanScreen() {
     const confidenceScore = noPlantDetected
       ? 0
       : Number(scan?.recommendation_payload?.confidence ?? scan?.analysis_result?.confidence_score ?? 0);
+    const belowThreshold = confidenceScore > 0 && confidenceScore < CONFIDENCE_THRESHOLD;
+    const invalidPlant = noPlantDetected || belowThreshold;
     const confidence = noPlantDetected ? 'N/A' : (confidenceScore ? `${Math.round(confidenceScore * 100)}%` : 'N/A');
 
     return {
       maturity,
       maturityStage,
-      noPlantDetected,
+      noPlantDetected: invalidPlant,
+      lowConfidence: belowThreshold,
       healthStatus: noPlantDetected ? 'leaf_spot' : (primaryClass === 'healthy' ? 'healthy' : primaryClass),
       diseases: diseaseList.length ? diseaseList : [],
       recommendations: noPlantDetected
@@ -127,6 +132,7 @@ export default function CaptureImageScanScreen() {
     setScannedImage(imageUri);
     setLiveConfidence('Analyzing...');
     setPreviewId('');
+    setFlashEnabled(false);
 
     try {
       const preview = await analyzeScanPreview({ imageUri });
@@ -135,7 +141,11 @@ export default function CaptureImageScanScreen() {
       setScanResult(formatted);
       setLiveConfidence(`Confidence ${formatted.confidence}`);
       if (formatted.noPlantDetected) {
-        setError('No plant detected. Please retake the scan with one aloe vera plant centered in frame.');
+        setError(
+          formatted.lowConfidence
+            ? 'Low confidence (<45%). Please retake the scan with one aloe vera plant centered in frame.'
+            : 'No plant detected. Please retake the scan with one aloe vera plant centered in frame.'
+        );
         setShowResults(false);
       } else {
         setShowResults(true);
@@ -170,6 +180,7 @@ export default function CaptureImageScanScreen() {
     if (!cameraRef.current || loading) return;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      setFlashEnabled(false);
       await runScan(photo.uri);
     } catch (err) {
       setError(err.message || 'Unable to capture image.');

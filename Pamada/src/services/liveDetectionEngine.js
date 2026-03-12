@@ -49,23 +49,55 @@ export async function runLiveDetection(imageUri, token) {
 
   const payload = response?.data || {};
   const predictions = payload.yolo_predictions || [];
+  const maturityDetections = payload?.maturity_data?.detections || [];
+
+  const toBoxRatios = (box = {}) => {
+    const rawX = Number(
+      box.x ?? box.left ?? box.x1 ?? (Array.isArray(box) ? box[0] : 0) ?? 0
+    );
+    const rawY = Number(
+      box.y ?? box.top ?? box.y1 ?? (Array.isArray(box) ? box[1] : 0) ?? 0
+    );
+    const rawW = Number(
+      box.width ?? (box.x2 !== undefined ? Number(box.x2) - rawX : undefined) ?? (Array.isArray(box) ? box[2] : 0)
+    );
+    const rawH = Number(
+      box.height ?? (box.y2 !== undefined ? Number(box.y2) - rawY : undefined) ?? (Array.isArray(box) ? box[3] : 0)
+    );
+
+    const maxVal = Math.max(rawX, rawY, rawW, rawH);
+    const isNormalized = maxVal <= 1.5;
+    const width = processed.width || 1;
+    const height = processed.height || 1;
+
+    return {
+      xRatio: isNormalized ? rawX : rawX / width,
+      yRatio: isNormalized ? rawY : rawY / height,
+      wRatio: isNormalized ? rawW : rawW / width,
+      hRatio: isNormalized ? rawH : rawH / height,
+    };
+  };
 
   const mapped = predictions
     .filter((pred) => aloeRelatedClasses.has(pred.class))
     .map((pred) => ({
       label: pred.class,
       confidence: Number(pred.confidence || 0),
-      bbox: {
-        xRatio: processed.width ? Number(pred?.bounding_box?.x || 0) / processed.width : 0,
-        yRatio: processed.height ? Number(pred?.bounding_box?.y || 0) / processed.height : 0,
-        wRatio: processed.width ? Number(pred?.bounding_box?.width || 0) / processed.width : 0,
-        hRatio: processed.height ? Number(pred?.bounding_box?.height || 0) / processed.height : 0,
-      },
+      bbox: toBoxRatios(pred?.bounding_box || {}),
     }))
-    .filter((pred) => pred.bbox.wRatio > 0 && pred.bbox.hRatio > 0)
-    .sort((a, b) => b.confidence - a.confidence);
+    .filter((pred) => pred.bbox.wRatio > 0 && pred.bbox.hRatio > 0);
 
-  const top = mapped[0] || null;
+  const mappedFromMaturity = maturityDetections
+    .map((det) => ({
+      label: det.label || 'aloe',
+      confidence: Number(det.confidence || 0),
+      bbox: toBoxRatios(det.bounding_box || det.box || det.bbox || {}),
+    }))
+    .filter((pred) => pred.bbox.wRatio > 0 && pred.bbox.hRatio > 0);
+
+  const combined = [...mapped, ...mappedFromMaturity].sort((a, b) => b.confidence - a.confidence);
+
+  const top = combined[0] || null;
   const maturity =
     payload?.analysis_result?.maturity_assessment ||
     payload?.age_estimation?.maturity_assessment ||
@@ -75,7 +107,7 @@ export async function runLiveDetection(imageUri, token) {
   return {
     ready: modelLoaded,
     error: '',
-    detections: mapped,
+    detections: combined,
     disease: top?.label || '',
     maturity,
     confidence,

@@ -15,7 +15,7 @@ import { radius, spacing, typography } from '../theme';
 import useAppTheme from '../theme/useAppTheme';
 import { initializeLiveDetectionModel, runLiveDetection } from '../services/liveDetectionEngine';
 
-const CONFIDENCE_THRESHOLD = 0.5;
+const CONFIDENCE_THRESHOLD = 0.45;
 const FRAME_INTERVAL_MS = 250;
 
 const toTitle = (value = '') =>

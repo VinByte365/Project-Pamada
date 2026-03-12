@@ -1,8 +1,12 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { Asset } from 'expo-asset';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppData } from '../contexts/AppDataContext';
 import AnimatedInView from '../components/common/AnimatedInView';
@@ -54,6 +58,188 @@ export default function ProfileScreen() {
   const diseases = getDiseaseDistribution(analytics, [
     { name: 'No active disease signals', percentage: 0, color: palette.status.success },
   ]);
+
+  const parsePercent = (value) => {
+    if (typeof value === 'number') return value;
+    const normalized = String(value || '').replace('%', '').trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const escapeHtml = (value) =>
+    String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+  const buildInsight = (label, value, isEmpty, isInverse = false) => {
+    if (isEmpty) {
+      return {
+        summary: `No ${label.toLowerCase()} data recorded yet.`,
+        interpretation: 'Start scanning plants to generate this analytics section.',
+      };
+    }
+
+    const normalized = Math.min(Math.max(value, 0), 100);
+    const good = isInverse ? normalized <= 30 : normalized >= 70;
+    const moderate = isInverse ? normalized <= 55 : normalized >= 45;
+    const trend = good ? 'strong' : moderate ? 'mixed' : 'low';
+    const interpretation = good
+      ? 'Keep the current routine. Results are trending positively.'
+      : moderate
+      ? 'There is progress, but there is still room to improve consistency.'
+      : 'Focus on improving care routines and rescan with better lighting.';
+
+    return {
+      summary: `${label} is ${normalized.toFixed(0)}%, indicating a ${trend} signal.`,
+      interpretation,
+    };
+  };
+
+  const handleExportAnalytics = useCallback(async () => {
+    try {
+      const logoAsset = Asset.fromModule(DEFAULT_PROFILE_COVER);
+      if (!logoAsset.localUri) {
+        await logoAsset.downloadAsync();
+      }
+      const logoUri = logoAsset.localUri || logoAsset.uri;
+      const logoBase64 = logoUri
+        ? await LegacyFileSystem.readAsStringAsync(logoUri, {
+            encoding: LegacyFileSystem.EncodingType?.Base64 || 'base64',
+          })
+        : '';
+      const logoData = logoBase64 ? `data:image/png;base64,${logoBase64}` : '';
+
+      const harvestRate = parsePercent(analytics?.harvestRate);
+      const diseaseRate = parsePercent(analytics?.diseaseRate);
+      const avgMaturity = parsePercent(analytics?.avgMaturity);
+
+      const sections = [
+        {
+          key: 'harvest',
+          label: 'Harvest Rate',
+          value: harvestRate,
+          empty: harvestRate <= 0,
+          accent: '#22C55E',
+          inverse: false,
+        },
+        {
+          key: 'disease',
+          label: 'Disease Rate',
+          value: diseaseRate,
+          empty: diseaseRate <= 0,
+          accent: '#F97316',
+          inverse: true,
+        },
+        {
+          key: 'maturity',
+          label: 'Average Maturity',
+          value: avgMaturity,
+          empty: avgMaturity <= 0,
+          accent: '#38BDF8',
+          inverse: false,
+        },
+      ].map((section) => ({
+        ...section,
+        insight: buildInsight(section.label, section.value, section.empty, section.inverse),
+      }));
+
+      const html = `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <style>
+              * { box-sizing: border-box; font-family: "Helvetica Neue", Arial, sans-serif; }
+              body { margin: 0; padding: 32px; color: #1F2933; background: #F7FAF8; }
+              .header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+              .logo { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; }
+              .app-name { font-size: 24px; font-weight: 700; }
+              .sub { font-size: 13px; color: #516157; }
+              .card { background: #FFFFFF; border: 1px solid #E1E8E3; border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+              .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+              .info-item { font-size: 13px; }
+              .info-label { color: #5F6C63; margin-bottom: 4px; }
+              .section-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+              .graph-wrap { display: flex; align-items: center; gap: 16px; }
+              .graph { width: 140px; height: 140px; border-radius: 12px; border: 1px solid #E1E8E3; display: flex; align-items: center; justify-content: center; background: #F6FAF7; }
+              .graph-value { font-size: 24px; font-weight: 700; }
+              .bar { width: 100%; height: 10px; background: #E9F0EC; border-radius: 999px; overflow: hidden; margin-top: 12px; }
+              .bar-fill { height: 100%; border-radius: 999px; }
+              .summary { margin-top: 12px; font-size: 13px; color: #334155; }
+              .interpretation { margin-top: 6px; font-size: 12px; color: #5F6C63; }
+              .footer { margin-top: 24px; font-size: 11px; color: #7A867E; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${logoData ? `<img class="logo" src="${logoData}" />` : ''}
+              <div>
+                <div class="app-name">Pamada Analytics Report</div>
+                <div class="sub">Aloe Vera Intelligence Suite</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="section-title">Farm Profile</div>
+              <div class="info-grid">
+                <div class="info-item">
+                  <div class="info-label">User</div>
+                  <div>${escapeHtml(farmInfo.name)}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Location</div>
+                  <div>${escapeHtml(farmInfo.location)}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Farm Size</div>
+                  <div>${escapeHtml(farmInfo.size)}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Member Since</div>
+                  <div>${escapeHtml(farmInfo.joined)}</div>
+                </div>
+              </div>
+            </div>
+
+            ${sections
+              .map(
+                (section) => `
+                  <div class="card">
+                    <div class="section-title">${section.label}</div>
+                    <div class="graph-wrap">
+                      <div class="graph">
+                        <div class="graph-value">${section.empty ? '—' : `${section.value.toFixed(0)}%`}</div>
+                      </div>
+                      <div style="flex: 1;">
+                        <div class="bar">
+                          <div class="bar-fill" style="width: ${section.empty ? 0 : Math.min(section.value, 100)}%; background: ${section.accent};"></div>
+                        </div>
+                        <div class="summary">${escapeHtml(section.insight.summary)}</div>
+                        <div class="interpretation">${escapeHtml(section.insight.interpretation)}</div>
+                      </div>
+                    </div>
+                  </div>
+                `
+              )
+              .join('')}
+
+            <div class="footer">Generated on ${new Date().toLocaleString()}.</div>
+          </body>
+        </html>
+      `;
+
+      const file = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+      } else {
+        Alert.alert('Export Complete', 'PDF saved. Sharing is not available on this device.');
+      }
+    } catch (error) {
+      Alert.alert('Export Failed', error.message || 'Unable to generate PDF.');
+    }
+  }, [analytics, farmInfo]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -140,7 +326,18 @@ export default function ProfileScreen() {
 
         <AnimatedInView delay={140}>
           <ElevatedCard style={styles.analyticsCard}>
-            <Text style={[styles.cardTitle, { color: palette.text.primary }]}>Your Analytics</Text>
+            <View style={styles.analyticsHeader}>
+              <Text style={[styles.cardTitle, { color: palette.text.primary, marginBottom: 0 }]}>Your Analytics</Text>
+              <TouchableOpacity
+                style={[styles.exportButton, { borderColor: palette.surface.border, backgroundColor: palette.surface.soft }]}
+                onPress={handleExportAnalytics}
+                accessibilityRole="button"
+                accessibilityLabel="Export analytics report"
+              >
+                <Ionicons name="download-outline" size={16} color={palette.text.primary} />
+                <Text style={[styles.exportButtonText, { color: palette.text.primary }]}>Export</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.metricsGrid}>
               {metrics.map((metric) => (
                 <View
@@ -384,6 +581,26 @@ const styles = StyleSheet.create({
   },
   analyticsCard: {
     padding: spacing.md,
+  },
+  analyticsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  exportButton: {
+    minHeight: 32,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+  },
+  exportButtonText: {
+    ...typography.caption,
+    fontWeight: '700',
   },
   metricsGrid: {
     flexDirection: 'row',

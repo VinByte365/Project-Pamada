@@ -754,6 +754,7 @@ exports.liveDetect = asyncHandler(async (req, res) => {
     success: true,
     data: {
       yolo_predictions: mlResults.yolo_predictions || [],
+      maturity_data: mlResults.maturity_data || {},
       age_estimation: mlResults.age_estimation || {},
       confidence_score: mlResults.confidence_score || 0,
       analysis_result: analysisResult,

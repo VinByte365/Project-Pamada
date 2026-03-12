@@ -306,6 +306,33 @@ exports.getSummary = asyncHandler(async (req, res) => {
     'current_status.disease_severity': { $ne: 'none' }
   });
 
+  const latestScans = await Scan.aggregate([
+    { $match: { user_id: req.user.id } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: '$plant_id',
+        analysis_result: { $first: '$analysis_result' },
+        disease_key: { $first: '$disease_key' },
+        yolo_predictions: { $first: '$yolo_predictions' },
+      },
+    },
+  ]);
+
+  const scanBasedDiseasedPlants = latestScans.reduce((count, scan) => {
+    const diseaseDetected = scan?.analysis_result?.disease_detected === true;
+    const diseaseKey = String(scan?.disease_key || '').toLowerCase();
+    const topClass = String(scan?.yolo_predictions?.[0]?.class || '').toLowerCase();
+    const diseased = diseaseDetected ||
+      (diseaseKey && diseaseKey !== 'healthy') ||
+      (topClass && topClass !== 'healthy');
+    return count + (diseased ? 1 : 0);
+  }, 0);
+
+  const totalPlantsAdjusted = totalPlants > 0 ? totalPlants : latestScans.length;
+  const diseasedPlantsAdjusted = Math.max(diseasedPlants, scanBasedDiseasedPlants);
+  const healthyPlantsAdjusted = Math.max(0, totalPlantsAdjusted - diseasedPlantsAdjusted);
+
   const recentScans = await Scan.find({ user_id: req.user.id })
     .sort({ createdAt: -1 })
     .limit(5)
@@ -315,11 +342,11 @@ exports.getSummary = asyncHandler(async (req, res) => {
     success: true,
     data: {
       summary: {
-        total_plants: totalPlants,
+        total_plants: totalPlantsAdjusted,
         total_scans: totalScans,
         harvest_ready: harvestReadyPlants,
-        diseased_plants: diseasedPlants,
-        healthy_plants: totalPlants - diseasedPlants
+        diseased_plants: diseasedPlantsAdjusted,
+        healthy_plants: healthyPlantsAdjusted
       },
       recent_scans: recentScans
     }

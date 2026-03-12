@@ -364,14 +364,6 @@ export default function LoginScreen({ navigation }) {
                 </View>
                 <Text style={[styles.checkboxLabel, { color: palette.text.secondary }]}>Remember Me</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                disabled={loading}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                onPress={openForgotPassword}
-              >
-                <Text style={[styles.forgotLink, { color: palette.primary.solid }]}>Forgot Password?</Text>
-              </TouchableOpacity>
             </View>
 
             <EnhancedButton
