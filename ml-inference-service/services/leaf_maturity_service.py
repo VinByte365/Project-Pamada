@@ -74,6 +74,21 @@ class LeafMaturityService:
         pil_image.save(buffer, format='JPEG', quality=90)
         return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
+    def detect_leaves(self, image_rgb, confidence_threshold=None):
+        """Return leaf detections and maturity data without drawing annotations."""
+        threshold = self.default_threshold if confidence_threshold is None else float(confidence_threshold)
+        raw_predictions = self.yolo.predict(image_rgb, conf=threshold, iou=0.45, include_fallback=False)
+        leaf_detections = [
+            pred for pred in raw_predictions
+            if pred['confidence'] >= threshold and self._normalize(pred['class']) == self.model_leaf_class
+        ]
+        leaf_count = len(leaf_detections)
+        return {
+            'leaf_count': leaf_count,
+            'maturity_stage': self.classify_maturity(leaf_count),
+            'detections': leaf_detections,
+        }
+
     def analyze(self, image_rgb, confidence_threshold=None):
         threshold = self.default_threshold if confidence_threshold is None else float(confidence_threshold)
         raw_predictions = self.yolo.predict(

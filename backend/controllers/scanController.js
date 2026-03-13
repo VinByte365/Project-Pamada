@@ -1,34 +1,39 @@
-const Scan = require('../models/scan');
-const Plant = require('../models/plant');
-const mongoose = require('mongoose');
+const Scan = require("../models/scan");
+const Plant = require("../models/plant");
+const mongoose = require("mongoose");
 const {
   uploadImage,
   generateThumbnail,
   generateOptimizedImageUrl,
-} = require('../services/imageService');
-const { processScanAsync, processScanAnalysis } = require('../services/scanAnalysisService');
-const mlService = require('../services/mlService');
-const aloeVerificationService = require('../services/aloeVerificationService');
-const PlantScan = require('../models/plantScan');
-const Recommendation = require('../models/recommendation');
-const asyncHandler = require('../utils/controllerWrapper');
+} = require("../services/imageService");
+const {
+  processScanAsync,
+  processScanAnalysis,
+} = require("../services/scanAnalysisService");
+const mlService = require("../services/mlService");
+const aloeVerificationService = require("../services/aloeVerificationService");
+const PlantScan = require("../models/plantScan");
+const Recommendation = require("../models/recommendation");
+const asyncHandler = require("../utils/controllerWrapper");
 const {
   buildStructuredRecommendationsByDiseaseKey,
   createPlantScanWithRecommendations,
   getStructuredRecommendationsByPlantScanId,
   markRecommendationCompletion,
-} = require('../services/presetRecommendationService');
+} = require("../services/presetRecommendationService");
 const {
   normalizePrimaryCondition,
   normalizeDiseaseSeverity,
-} = require('../utils/plantStatusNormalizer');
+} = require("../utils/plantStatusNormalizer");
 
 function isHarvestReadyFromStage(stage) {
-  const value = String(stage || '').toLowerCase();
-  return value.includes('ready for harvest') || value.includes('mature');
+  const value = String(stage || "").toLowerCase();
+  return value.includes("ready for harvest") || value.includes("mature");
 }
 
-const PREVIEW_TTL_MS = Number(process.env.SCAN_PREVIEW_TTL_MS || 10 * 60 * 1000);
+const PREVIEW_TTL_MS = Number(
+  process.env.SCAN_PREVIEW_TTL_MS || 10 * 60 * 1000,
+);
 const previewStore = new Map();
 
 function createPreviewId() {
@@ -67,45 +72,46 @@ function cleanupExpiredPreviews() {
 
 function extractDiseasePayload(mlResults = {}, analysisResult = {}) {
   const rawDiseaseKey = String(
-    mlResults?.disease_key ||
-    mlResults?.disease_result?.disease_key ||
-    ''
+    mlResults?.disease_key || mlResults?.disease_result?.disease_key || "",
   )
     .trim()
     .toLowerCase();
-  const yoloClass = String(mlResults?.yolo_predictions?.[0]?.class || '').trim().toLowerCase();
+  const yoloClass = String(mlResults?.yolo_predictions?.[0]?.class || "")
+    .trim()
+    .toLowerCase();
   const aliasMap = {
-    healthy: 'healthy',
-    leaf_spot: 'leaf_spot',
-    root_rot: 'root_rot',
-    sunburn: 'sunburn',
-    aloe_rust: 'aloe_rust',
-    bacterial_soft_rot: 'bacterial_soft_rot',
-    anthracnose: 'anthracnose',
-    scale_insect: 'scale_insect',
-    mealybug: 'mealybug',
-    spider_mite: 'spider_mite',
-    fungal_infection: 'leaf_spot',
-    bacterial_spot: 'bacterial_soft_rot',
-    fungal_disease: 'leaf_spot',
-    fungus: 'leaf_spot',
-    rust: 'aloe_rust',
-    rot: 'root_rot',
-    insect: 'scale_insect',
-    unknown_condition: 'unknown_condition',
+    healthy: "healthy",
+    leaf_spot: "leaf_spot",
+    root_rot: "root_rot",
+    sunburn: "sunburn",
+    aloe_rust: "aloe_rust",
+    bacterial_soft_rot: "bacterial_soft_rot",
+    anthracnose: "anthracnose",
+    scale_insect: "scale_insect",
+    mealybug: "mealybug",
+    spider_mite: "spider_mite",
+    fungal_infection: "leaf_spot",
+    bacterial_spot: "bacterial_soft_rot",
+    fungal_disease: "leaf_spot",
+    fungus: "leaf_spot",
+    rust: "aloe_rust",
+    rot: "root_rot",
+    insect: "scale_insect",
+    unknown_condition: "unknown_condition",
   };
-  const diseaseKey = aliasMap[rawDiseaseKey] || aliasMap[yoloClass] || 'unknown_condition';
+  const diseaseKey =
+    aliasMap[rawDiseaseKey] || aliasMap[yoloClass] || "unknown_condition";
   const confidence = Number(
     mlResults?.confidence ??
-    mlResults?.disease_result?.confidence ??
-    analysisResult?.confidence_score ??
-    0
+      mlResults?.disease_result?.confidence ??
+      analysisResult?.confidence_score ??
+      0,
   );
   const severity = String(
     mlResults?.severity ||
-    mlResults?.disease_result?.severity ||
-    analysisResult?.disease_severity ||
-    'medium'
+      mlResults?.disease_result?.severity ||
+      analysisResult?.disease_severity ||
+      "medium",
   )
     .trim()
     .toLowerCase();
@@ -114,14 +120,20 @@ function extractDiseasePayload(mlResults = {}, analysisResult = {}) {
 }
 
 function toRecommendationSeverity(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'high' || normalized === 'medium' || normalized === 'low') {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (
+    normalized === "high" ||
+    normalized === "medium" ||
+    normalized === "low"
+  ) {
     return normalized;
   }
-  if (normalized === 'severe') return 'high';
-  if (normalized === 'moderate') return 'medium';
-  if (normalized === 'mild') return 'low';
-  return 'medium';
+  if (normalized === "severe") return "high";
+  if (normalized === "moderate") return "medium";
+  if (normalized === "mild") return "low";
+  return "medium";
 }
 
 async function ensurePlantScanLink(scan) {
@@ -136,17 +148,21 @@ async function ensurePlantScanLink(scan) {
     return scan;
   }
 
-  const diseaseKey = String(scan.disease_key || '').trim().toLowerCase();
+  const diseaseKey = String(scan.disease_key || "")
+    .trim()
+    .toLowerCase();
   if (!diseaseKey) {
     return null;
   }
 
   const confidence = Number(
     scan?.analysis_result?.confidence_score ??
-    scan?.yolo_predictions?.[0]?.confidence ??
-    0
+      scan?.yolo_predictions?.[0]?.confidence ??
+      0,
   );
-  const severity = toRecommendationSeverity(scan?.analysis_result?.disease_severity);
+  const severity = toRecommendationSeverity(
+    scan?.analysis_result?.disease_severity,
+  );
 
   const linked = await createPlantScanWithRecommendations({
     userId: scan.user_id,
@@ -166,7 +182,8 @@ async function ensurePlantScanLink(scan) {
 async function remapToHealthyPresetIfNeeded(scan) {
   if (!scan?.plant_scan_id) return scan;
   const isHealthyResult = scan?.analysis_result?.disease_detected === false;
-  const isUnknown = String(scan?.disease_key || '').toLowerCase() === 'unknown_condition';
+  const isUnknown =
+    String(scan?.disease_key || "").toLowerCase() === "unknown_condition";
   if (!isHealthyResult || !isUnknown) {
     return scan;
   }
@@ -174,15 +191,15 @@ async function remapToHealthyPresetIfNeeded(scan) {
   const linked = await createPlantScanWithRecommendations({
     userId: scan.user_id,
     plantId: scan.plant_id,
-    diseaseKey: 'healthy',
+    diseaseKey: "healthy",
     confidence: Number(scan?.analysis_result?.confidence_score || 0.8),
-    severity: 'low',
+    severity: "low",
     legacyScanId: scan._id,
   });
 
   scan.plant_scan_id = linked.plantScan._id;
   scan.disease_id = linked.plantScan.disease_id;
-  scan.disease_key = 'healthy';
+  scan.disease_key = "healthy";
   await scan.save();
   return scan;
 }
@@ -191,42 +208,78 @@ async function verifyAloeOrFallback(imageBuffer) {
   try {
     return await aloeVerificationService.verify(imageBuffer);
   } catch (error) {
-    console.warn('Aloe verification service unavailable, allowing scan fallback:', error.message);
-    return { isAloe: true, fallback: true, reason: 'verifier_unavailable' };
+    console.warn(
+      "Aloe verification service unavailable, allowing scan fallback:",
+      error.message,
+    );
+    return { isAloe: true, fallback: true, reason: "verifier_unavailable" };
   }
 }
 
 function mlIndicatesPlant(mlResults = {}, analysisResult = {}) {
-  const stage = String(analysisResult?.maturity_stage || mlResults?.maturity_data?.maturity_stage || '').toLowerCase();
-  const noPlantFromMaturity = stage.includes('no plant detected');
-  const hasRealYoloDetection = Array.isArray(mlResults?.yolo_predictions) && mlResults.yolo_predictions.some((pred) => {
-    const box = pred?.bounding_box || {};
-    return Number(box.width || 0) > 1 && Number(box.height || 0) > 1;
-  });
-  const hasMaturityLeaves = Number(mlResults?.maturity_data?.leaf_count || analysisResult?.leaf_count || 0) > 0;
+  const stage = String(
+    analysisResult?.maturity_stage ||
+      mlResults?.maturity_data?.maturity_stage ||
+      "",
+  ).toLowerCase();
+  const noPlantFromMaturity = stage.includes("no plant detected");
+  const hasRealYoloDetection =
+    Array.isArray(mlResults?.yolo_predictions) &&
+    mlResults.yolo_predictions.some((pred) => {
+      const box = pred?.bounding_box || {};
+      return Number(box.width || 0) > 1 && Number(box.height || 0) > 1;
+    });
+  const hasMaturityLeaves =
+    Number(
+      mlResults?.maturity_data?.leaf_count || analysisResult?.leaf_count || 0,
+    ) > 0;
   const colorIndex = Number(mlResults?.visual_features?.leaf_color_index || 0);
   const likelyPlantFromColor = colorIndex >= 0.02;
-  return !noPlantFromMaturity || hasRealYoloDetection || hasMaturityLeaves || likelyPlantFromColor;
+  return (
+    !noPlantFromMaturity ||
+    hasRealYoloDetection ||
+    hasMaturityLeaves ||
+    likelyPlantFromColor
+  );
 }
 
-function coerceNoPlantForVerifiedAloe(analysisResult = {}, verifyResult = {}, mlResults = {}) {
-  const stage = String(analysisResult?.maturity_stage || '').toLowerCase();
-  const isNoPlant = stage.includes('no plant detected');
+function coerceNoPlantForVerifiedAloe(
+  analysisResult = {},
+  verifyResult = {},
+  mlResults = {},
+) {
+  const stage = String(analysisResult?.maturity_stage || "").toLowerCase();
+  const isNoPlant = stage.includes("no plant detected");
   if (!isNoPlant || !verifyResult?.isAloe) {
     return analysisResult;
   }
 
-  const leafCount = Number(analysisResult?.leaf_count || mlResults?.maturity_data?.leaf_count || 0);
+  const leafCount = Number(
+    analysisResult?.leaf_count || mlResults?.maturity_data?.leaf_count || 0,
+  );
   const colorIndex = Number(mlResults?.visual_features?.leaf_color_index || 0);
-  const fallbackStage = leafCount > 0
-    ? (leafCount >= 12 ? 'Mature / Ready for Harvest' : leafCount >= 7 ? 'Developing / Almost Ready' : 'Young / Not Ready')
-    : (colorIndex >= 0.02 ? 'Young / Not Ready' : 'Not Ready for Harvest');
+  const fallbackStage =
+    leafCount > 0
+      ? leafCount >= 12
+        ? "Mature / Ready for Harvest"
+        : leafCount >= 7
+          ? "Developing / Almost Ready"
+          : "Young / Not Ready"
+      : colorIndex >= 0.02
+        ? "Young / Not Ready"
+        : "Not Ready for Harvest";
 
   const recommendations = analysisResult?.recommendations || {};
-  const treatment = Array.isArray(recommendations.treatment_plan) ? recommendations.treatment_plan : [];
-  const normalizedTreatment = treatment.filter((item) => !String(item).toLowerCase().includes('no plant detected'));
+  const treatment = Array.isArray(recommendations.treatment_plan)
+    ? recommendations.treatment_plan
+    : [];
+  const normalizedTreatment = treatment.filter(
+    (item) => !String(item).toLowerCase().includes("no plant detected"),
+  );
   if (!normalizedTreatment.length) {
-    normalizedTreatment.push('Plant detected but maturity estimate is low-confidence. Retake scan in good daylight and frame the whole plant.');
+    normalizedTreatment.push(
+      "Plant detected but maturity estimate is low-confidence. Retake scan in good daylight and frame the whole plant.",
+    );
   }
 
   return {
@@ -240,10 +293,16 @@ function coerceNoPlantForVerifiedAloe(analysisResult = {}, verifyResult = {}, ml
   };
 }
 
-function buildVerificationDebug(verifyResult = {}, mlResults = {}, analysisResult = {}) {
-  const topPrediction = Array.isArray(mlResults?.yolo_predictions) && mlResults.yolo_predictions.length > 0
-    ? mlResults.yolo_predictions[0]
-    : null;
+function buildVerificationDebug(
+  verifyResult = {},
+  mlResults = {},
+  analysisResult = {},
+) {
+  const topPrediction =
+    Array.isArray(mlResults?.yolo_predictions) &&
+    mlResults.yolo_predictions.length > 0
+      ? mlResults.yolo_predictions[0]
+      : null;
   const plantDetectedByMl = mlIndicatesPlant(mlResults, analysisResult);
   return {
     verifier: {
@@ -258,8 +317,13 @@ function buildVerificationDebug(verifyResult = {}, mlResults = {}, analysisResul
     },
     ml: {
       indicates_plant: plantDetectedByMl,
-      maturity_stage: analysisResult?.maturity_stage || mlResults?.maturity_data?.maturity_stage || null,
-      leaf_count: Number(analysisResult?.leaf_count || mlResults?.maturity_data?.leaf_count || 0),
+      maturity_stage:
+        analysisResult?.maturity_stage ||
+        mlResults?.maturity_data?.maturity_stage ||
+        null,
+      leaf_count: Number(
+        analysisResult?.leaf_count || mlResults?.maturity_data?.leaf_count || 0,
+      ),
       top_prediction: topPrediction
         ? {
             class: topPrediction.class,
@@ -299,7 +363,7 @@ async function resolveUserPlant(plantIdentifier, userId, options = {}) {
 
     const plant = await Plant.findOne({
       owner_id: userId,
-      $or: plantQuery
+      $or: plantQuery,
     });
 
     if (plant) {
@@ -319,15 +383,17 @@ async function resolveUserPlant(plantIdentifier, userId, options = {}) {
 // @access  Private
 exports.createScan = asyncHandler(async (req, res) => {
   const { plant_id } = req.body;
-  const syncProcessing = String(req.query.sync || '').toLowerCase() === 'true';
+  const syncProcessing = String(req.query.sync || "").toLowerCase() === "true";
 
   // Resolve plant by Mongo _id or business plant_id, fallback to latest owned plant.
-  const plant = await resolveUserPlant(plant_id, req.user.id, { fallbackToLatest: true });
+  const plant = await resolveUserPlant(plant_id, req.user.id, {
+    fallbackToLatest: true,
+  });
 
   if (!plant) {
     return res.status(404).json({
       success: false,
-      error: 'Plant not found. Please create a plant profile first.'
+      error: "Plant not found. Please create a plant profile first.",
     });
   }
 
@@ -335,7 +401,7 @@ exports.createScan = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       success: false,
-      error: 'Please upload an image'
+      error: "Please upload an image",
     });
   }
 
@@ -343,14 +409,14 @@ exports.createScan = asyncHandler(async (req, res) => {
   if (!verifyResult?.isAloe) {
     return res.status(400).json({
       success: false,
-      error: 'Scan Aloe Vera plant only.',
+      error: "Scan Aloe Vera plant only.",
       debug: buildVerifyOnlyDebug(verifyResult),
     });
   }
 
   // Upload image to Cloudinary
-  const uploadResult = await uploadImage(req.file.buffer, 'aloe-vera-scans');
-  
+  const uploadResult = await uploadImage(req.file.buffer, "aloe-vera-scans");
+
   // Generate thumbnail
   const thumbnailUrl = await generateThumbnail(uploadResult.public_id);
   const optimizedUrl = generateOptimizedImageUrl(uploadResult.public_id);
@@ -366,17 +432,17 @@ exports.createScan = asyncHandler(async (req, res) => {
       optimized_url: optimizedUrl,
       thumbnail_url: thumbnailUrl,
       public_id: uploadResult.public_id,
-      resource_type: uploadResult.resource_type || 'image',
+      resource_type: uploadResult.resource_type || "image",
       file_size: req.file.size,
       dimensions: {
         width: uploadResult.width,
-        height: uploadResult.height
-      }
+        height: uploadResult.height,
+      },
     },
     scan_metadata: {
-      device_type: req.headers['user-agent'],
-      app_version: req.body.app_version || '1.0.0'
-    }
+      device_type: req.headers["user-agent"],
+      app_version: req.body.app_version || "1.0.0",
+    },
   };
 
   const scan = await Scan.create(scanData);
@@ -386,18 +452,23 @@ exports.createScan = asyncHandler(async (req, res) => {
     { _id: plant._id, owner_id: req.user.id },
     {
       $set: {
-        'current_status.last_scan_date': new Date(),
-        'current_status.harvest_ready': false,
-        'current_status.lifecycle_stage': 'growing',
+        "current_status.last_scan_date": new Date(),
+        "current_status.harvest_ready": false,
+        "current_status.lifecycle_stage": "growing",
       },
-    }
+    },
   );
 
   if (syncProcessing) {
     try {
-      const updatedScan = await processScanAnalysis(scan._id.toString(), req.file.buffer);
+      const updatedScan = await processScanAnalysis(
+        scan._id.toString(),
+        req.file.buffer,
+      );
       const structuredRecommendations = updatedScan?.plant_scan_id
-        ? await getStructuredRecommendationsByPlantScanId(updatedScan.plant_scan_id)
+        ? await getStructuredRecommendationsByPlantScanId(
+            updatedScan.plant_scan_id,
+          )
         : null;
       return res.status(201).json({
         success: true,
@@ -405,37 +476,42 @@ exports.createScan = asyncHandler(async (req, res) => {
           scan: updatedScan,
           recommendation_payload: structuredRecommendations?.payload || null,
         },
-        message: 'Scan created and analyzed successfully.'
+        message: "Scan created and analyzed successfully.",
       });
     } catch (error) {
-      console.error('Sync scan analysis failed:', error);
-      if (error?.code === 'DISEASE_KEY_NOT_MAPPED' || String(error?.message || '').toLowerCase().includes('disease_key')) {
+      console.error("Sync scan analysis failed:", error);
+      if (
+        error?.code === "DISEASE_KEY_NOT_MAPPED" ||
+        String(error?.message || "")
+          .toLowerCase()
+          .includes("disease_key")
+      ) {
         return res.status(422).json({
           success: false,
-          error: error.message || 'No preset mapping found for disease_key.',
+          error: error.message || "No preset mapping found for disease_key.",
         });
       }
       return res.status(201).json({
         success: true,
         data: {
-          scan
+          scan,
         },
-        message: 'Scan created. Analysis will be processed shortly.'
+        message: "Scan created. Analysis will be processed shortly.",
       });
     }
   }
 
   // Process scan analysis asynchronously
-  processScanAsync(scan._id.toString()).catch(err => {
-    console.error('Error processing scan analysis:', err);
+  processScanAsync(scan._id.toString()).catch((err) => {
+    console.error("Error processing scan analysis:", err);
   });
 
   res.status(201).json({
     success: true,
     data: {
-      scan
+      scan,
     },
-    message: 'Scan created successfully. Analysis will be processed shortly.'
+    message: "Scan created successfully. Analysis will be processed shortly.",
   });
 });
 
@@ -446,18 +522,20 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
   cleanupExpiredPreviews();
 
   const { plant_id } = req.body;
-  const plant = await resolveUserPlant(plant_id, req.user.id, { fallbackToLatest: true });
+  const plant = await resolveUserPlant(plant_id, req.user.id, {
+    fallbackToLatest: true,
+  });
   if (!plant) {
     return res.status(404).json({
       success: false,
-      error: 'Plant not found. Please create a plant profile first.',
+      error: "Plant not found. Please create a plant profile first.",
     });
   }
 
   if (!req.file) {
     return res.status(400).json({
       success: false,
-      error: 'Please upload an image',
+      error: "Please upload an image",
     });
   }
 
@@ -465,7 +543,7 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
   if (!verifyResult?.isAloe) {
     return res.status(400).json({
       success: false,
-      error: 'Scan Aloe Vera plant only.',
+      error: "Scan Aloe Vera plant only.",
       debug: buildVerifyOnlyDebug(verifyResult),
     });
   }
@@ -474,7 +552,11 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
     filename: `preview_${Date.now()}.jpg`,
   });
   let analysisResult = mlService.generateAnalysisResult(mlResults);
-  analysisResult = coerceNoPlantForVerifiedAloe(analysisResult, verifyResult, mlResults);
+  analysisResult = coerceNoPlantForVerifiedAloe(
+    analysisResult,
+    verifyResult,
+    mlResults,
+  );
   const diseasePayload = extractDiseasePayload(mlResults, analysisResult);
   const structuredRecommendationPayload = diseasePayload.diseaseKey
     ? await buildStructuredRecommendationsByDiseaseKey({
@@ -486,21 +568,25 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
   if (!structuredRecommendationPayload) {
     return res.status(422).json({
       success: false,
-      error: `No preset recommendation mapping found for disease_key: ${diseasePayload.diseaseKey || 'unknown'}`,
+      error: `No preset recommendation mapping found for disease_key: ${diseasePayload.diseaseKey || "unknown"}`,
     });
   }
-  const verificationDebug = buildVerificationDebug(verifyResult, mlResults, analysisResult);
+  const verificationDebug = buildVerificationDebug(
+    verifyResult,
+    mlResults,
+    analysisResult,
+  );
   const allowScan = verificationDebug.allow_scan;
 
   if (!allowScan) {
     return res.status(400).json({
       success: false,
-      error: 'Scan Aloe Vera plant only.',
+      error: "Scan Aloe Vera plant only.",
       debug: verificationDebug,
     });
   }
 
-  const uploadResult = await uploadImage(req.file.buffer, 'aloe-vera-scans');
+  const uploadResult = await uploadImage(req.file.buffer, "aloe-vera-scans");
   const thumbnailUrl = await generateThumbnail(uploadResult.public_id);
   const optimizedUrl = generateOptimizedImageUrl(uploadResult.public_id);
 
@@ -513,7 +599,7 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
       optimized_url: optimizedUrl,
       thumbnail_url: thumbnailUrl,
       public_id: uploadResult.public_id,
-      resource_type: uploadResult.resource_type || 'image',
+      resource_type: uploadResult.resource_type || "image",
       file_size: req.file.size,
       dimensions: {
         width: uploadResult.width,
@@ -528,8 +614,8 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
     disease_confidence: diseasePayload.confidence,
     disease_severity: diseasePayload.severity,
     processing_time_ms: mlResults.processing_time_ms || 0,
-    app_version: req.body.app_version || '1.0.0',
-    device_type: req.headers['user-agent'],
+    app_version: req.body.app_version || "1.0.0",
+    device_type: req.headers["user-agent"],
   });
 
   return res.status(200).json({
@@ -541,7 +627,7 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
         optimized_url: optimizedUrl,
         thumbnail_url: thumbnailUrl,
         public_id: uploadResult.public_id,
-        resource_type: uploadResult.resource_type || 'image',
+        resource_type: uploadResult.resource_type || "image",
       },
       yolo_predictions: mlResults.yolo_predictions || [],
       visual_features: mlResults.visual_features || {},
@@ -555,7 +641,7 @@ exports.analyzePreview = asyncHandler(async (req, res) => {
       processing_time_ms: mlResults.processing_time_ms || 0,
       verification: verificationDebug,
     },
-    message: 'Preview analyzed successfully.',
+    message: "Preview analyzed successfully.",
   });
 });
 
@@ -566,7 +652,7 @@ exports.verifyAloeDebug = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       success: false,
-      error: 'Please upload an image',
+      error: "Please upload an image",
     });
   }
 
@@ -575,21 +661,25 @@ exports.verifyAloeDebug = asyncHandler(async (req, res) => {
     return res.status(200).json({
       success: true,
       data: buildVerifyOnlyDebug(verifyResult),
-      message: 'Image fails aloe verification gate.',
+      message: "Image fails aloe verification gate.",
     });
   }
   const mlResults = await mlService.analyzeImage(req.file.buffer, {
     filename: `debug_${Date.now()}.jpg`,
   });
   const analysisResult = mlService.generateAnalysisResult(mlResults);
-  const verificationDebug = buildVerificationDebug(verifyResult, mlResults, analysisResult);
+  const verificationDebug = buildVerificationDebug(
+    verifyResult,
+    mlResults,
+    analysisResult,
+  );
 
   return res.status(200).json({
     success: true,
     data: verificationDebug,
     message: verificationDebug.allow_scan
-      ? 'Image passes aloe verification gate.'
-      : 'Image fails aloe verification gate.',
+      ? "Image passes aloe verification gate."
+      : "Image fails aloe verification gate.",
   });
 });
 
@@ -599,12 +689,12 @@ exports.verifyAloeDebug = asyncHandler(async (req, res) => {
 exports.confirmPreview = asyncHandler(async (req, res) => {
   cleanupExpiredPreviews();
 
-  const previewId = String(req.body.preview_id || '').trim();
+  const previewId = String(req.body.preview_id || "").trim();
   const plantIdInput = req.body.plant_id;
   if (!previewId) {
     return res.status(400).json({
       success: false,
-      error: 'preview_id is required',
+      error: "preview_id is required",
     });
   }
 
@@ -612,28 +702,32 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
   if (!preview) {
     return res.status(404).json({
       success: false,
-      error: 'Preview expired or not found. Please scan again.',
+      error: "Preview expired or not found. Please scan again.",
     });
   }
 
   if (String(preview.user_id) !== String(req.user.id)) {
     return res.status(403).json({
       success: false,
-      error: 'Not allowed to confirm this preview.',
+      error: "Not allowed to confirm this preview.",
     });
   }
 
-  const plant = await resolveUserPlant(plantIdInput || preview.plant_id, req.user.id, { fallbackToLatest: true });
+  const plant = await resolveUserPlant(
+    plantIdInput || preview.plant_id,
+    req.user.id,
+    { fallbackToLatest: true },
+  );
   if (!plant) {
     return res.status(404).json({
       success: false,
-      error: 'Plant not found. Please create a plant profile first.',
+      error: "Plant not found. Please create a plant profile first.",
     });
   }
   if (!preview.disease_key) {
     return res.status(422).json({
       success: false,
-      error: 'Preview is missing disease_key. Please run scan analysis again.',
+      error: "Preview is missing disease_key. Please run scan analysis again.",
     });
   }
 
@@ -648,9 +742,9 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
     analysis_result: preview.analysis_result || {},
     scan_metadata: {
       device_type: preview.device_type,
-      app_version: preview.app_version || '1.0.0',
+      app_version: preview.app_version || "1.0.0",
       processing_time_ms: preview.processing_time_ms || 0,
-      model_version: process.env.MODEL_VERSION || '1.0.0',
+      model_version: process.env.MODEL_VERSION || "1.0.0",
     },
     disease_key: preview.disease_key || undefined,
   });
@@ -672,32 +766,44 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
   }
 
   if (preview.analysis_result) {
-    const nextHarvestReady = isHarvestReadyFromStage(preview.analysis_result?.maturity_stage)
-      || Boolean(preview.analysis_result.harvest_ready);
+    const nextHarvestReady =
+      isHarvestReadyFromStage(preview.analysis_result?.maturity_stage) ||
+      Boolean(preview.analysis_result.harvest_ready);
     await Plant.updateOne(
       { _id: plant._id },
       {
         $set: {
-          'current_status.harvest_ready': nextHarvestReady,
-          'current_status.lifecycle_stage': nextHarvestReady ? 'ready' : 'growing',
-          'current_status.health_score': preview.analysis_result.health_score || plant.current_status.health_score,
-          'current_status.primary_condition': normalizePrimaryCondition(
+          "current_status.harvest_ready": nextHarvestReady,
+          "current_status.lifecycle_stage": nextHarvestReady
+            ? "ready"
+            : "growing",
+          "current_status.health_score":
+            preview.analysis_result.health_score ||
+            plant.current_status.health_score,
+          "current_status.primary_condition": normalizePrimaryCondition(
             preview.yolo_predictions?.[0]?.class,
-            normalizePrimaryCondition(plant.current_status.primary_condition, 'healthy')
+            normalizePrimaryCondition(
+              plant.current_status.primary_condition,
+              "healthy",
+            ),
           ),
-          'current_status.disease_severity': normalizeDiseaseSeverity(
+          "current_status.disease_severity": normalizeDiseaseSeverity(
             preview.analysis_result.disease_severity,
-            normalizeDiseaseSeverity(plant.current_status.disease_severity, 'none')
+            normalizeDiseaseSeverity(
+              plant.current_status.disease_severity,
+              "none",
+            ),
           ),
-          'current_status.estimated_days_to_harvest': preview.analysis_result.estimated_days_to_harvest,
+          "current_status.estimated_days_to_harvest":
+            preview.analysis_result.estimated_days_to_harvest,
         },
-      }
+      },
     );
   }
 
   await Plant.updateOne(
     { _id: plant._id, owner_id: req.user.id },
-    { $set: { 'current_status.last_scan_date': new Date() } }
+    { $set: { "current_status.last_scan_date": new Date() } },
   );
 
   deletePreview(previewId);
@@ -708,7 +814,7 @@ exports.confirmPreview = asyncHandler(async (req, res) => {
       scan,
       recommendation_payload: recommendationPayload,
     },
-    message: 'Scan saved successfully.',
+    message: "Scan saved successfully.",
   });
 });
 
@@ -720,8 +826,8 @@ exports.getMlHealth = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: {
-      healthy
-    }
+      healthy,
+    },
   });
 });
 
@@ -732,7 +838,7 @@ exports.liveDetect = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       success: false,
-      error: 'Please upload an image frame',
+      error: "Please upload an image frame",
     });
   }
 
@@ -740,7 +846,7 @@ exports.liveDetect = asyncHandler(async (req, res) => {
   if (!verifyResult?.isAloe) {
     return res.status(400).json({
       success: false,
-      error: 'Scan Aloe Vera plant only.',
+      error: "Scan Aloe Vera plant only.",
       debug: buildVerifyOnlyDebug(verifyResult),
     });
   }
@@ -755,8 +861,10 @@ exports.liveDetect = asyncHandler(async (req, res) => {
     data: {
       yolo_predictions: mlResults.yolo_predictions || [],
       maturity_data: mlResults.maturity_data || {},
+      maturity_prediction: mlResults.maturity_prediction || {},
       age_estimation: mlResults.age_estimation || {},
-      confidence_score: mlResults.confidence_score || 0,
+      confidence_score:
+        analysisResult.confidence_score || mlResults.confidence_score || 0,
       analysis_result: analysisResult,
       processing_time_ms: mlResults.processing_time_ms || 0,
     },
@@ -778,7 +886,7 @@ exports.getScans = asyncHandler(async (req, res) => {
     if (!plant) {
       return res.status(404).json({
         success: false,
-        error: 'Plant not found'
+        error: "Plant not found",
       });
     }
 
@@ -786,13 +894,13 @@ exports.getScans = asyncHandler(async (req, res) => {
   }
 
   if (disease_detected !== undefined) {
-    query['analysis_result.disease_detected'] = disease_detected === 'true';
+    query["analysis_result.disease_detected"] = disease_detected === "true";
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const scans = await Scan.find(query)
-    .populate('plant_id', 'plant_id location current_status')
+    .populate("plant_id", "plant_id location current_status")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
@@ -806,8 +914,8 @@ exports.getScans = asyncHandler(async (req, res) => {
     page: parseInt(page),
     pages: Math.ceil(total / parseInt(limit)),
     data: {
-      scans
-    }
+      scans,
+    },
   });
 });
 
@@ -817,21 +925,21 @@ exports.getScans = asyncHandler(async (req, res) => {
 exports.getScan = asyncHandler(async (req, res) => {
   const scan = await Scan.findOne({
     _id: req.params.id,
-    user_id: req.user.id
-  }).populate('plant_id', 'plant_id location planting_date current_status');
+    user_id: req.user.id,
+  }).populate("plant_id", "plant_id location planting_date current_status");
 
   if (!scan) {
     return res.status(404).json({
       success: false,
-      error: 'Scan not found'
+      error: "Scan not found",
     });
   }
 
   res.status(200).json({
     success: true,
     data: {
-      scan
-    }
+      scan,
+    },
   });
 });
 
@@ -847,7 +955,7 @@ exports.getScanRecommendations = asyncHandler(async (req, res) => {
   if (!scan) {
     return res.status(404).json({
       success: false,
-      error: 'Scan not found',
+      error: "Scan not found",
     });
   }
 
@@ -855,7 +963,7 @@ exports.getScanRecommendations = asyncHandler(async (req, res) => {
   try {
     linkedScan = await ensurePlantScanLink(scan);
   } catch (error) {
-    if (error?.code === 'DISEASE_KEY_NOT_MAPPED') {
+    if (error?.code === "DISEASE_KEY_NOT_MAPPED") {
       return res.status(422).json({
         success: false,
         error: error.message,
@@ -866,16 +974,19 @@ exports.getScanRecommendations = asyncHandler(async (req, res) => {
   if (!linkedScan?.plant_scan_id) {
     return res.status(404).json({
       success: false,
-      error: 'No linked plant scan recommendation data found. This scan may predate disease_key linkage.',
+      error:
+        "No linked plant scan recommendation data found. This scan may predate disease_key linkage.",
     });
   }
   linkedScan = await remapToHealthyPresetIfNeeded(linkedScan);
 
-  const data = await getStructuredRecommendationsByPlantScanId(linkedScan.plant_scan_id);
+  const data = await getStructuredRecommendationsByPlantScanId(
+    linkedScan.plant_scan_id,
+  );
   if (!data) {
     return res.status(404).json({
       success: false,
-      error: 'No recommendation data found for this scan.',
+      error: "No recommendation data found for this scan.",
     });
   }
 
@@ -900,7 +1011,7 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
   if (!scan) {
     return res.status(404).json({
       success: false,
-      error: 'Scan not found',
+      error: "Scan not found",
     });
   }
 
@@ -908,7 +1019,7 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
   try {
     linkedScan = await ensurePlantScanLink(scan);
   } catch (error) {
-    if (error?.code === 'DISEASE_KEY_NOT_MAPPED') {
+    if (error?.code === "DISEASE_KEY_NOT_MAPPED") {
       return res.status(422).json({
         success: false,
         error: error.message,
@@ -919,16 +1030,19 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
   if (!linkedScan?.plant_scan_id) {
     return res.status(404).json({
       success: false,
-      error: 'No linked plant scan recommendation data found. This scan may predate disease_key linkage.',
+      error:
+        "No linked plant scan recommendation data found. This scan may predate disease_key linkage.",
     });
   }
   linkedScan = await remapToHealthyPresetIfNeeded(linkedScan);
 
-  const recommendation = await Recommendation.findById(req.params.recommendationId);
+  const recommendation = await Recommendation.findById(
+    req.params.recommendationId,
+  );
   if (!recommendation) {
     return res.status(404).json({
       success: false,
-      error: 'Recommendation not found.',
+      error: "Recommendation not found.",
     });
   }
 
@@ -936,18 +1050,21 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
   if (!linkedPlantScan) {
     return res.status(404).json({
       success: false,
-      error: 'Plant scan not found for this scan.',
+      error: "Plant scan not found for this scan.",
     });
   }
 
-  if (String(recommendation.disease_id) !== String(linkedPlantScan.disease_id)) {
+  if (
+    String(recommendation.disease_id) !== String(linkedPlantScan.disease_id)
+  ) {
     return res.status(400).json({
       success: false,
-      error: 'Recommendation does not belong to this scan disease mapping.',
+      error: "Recommendation does not belong to this scan disease mapping.",
     });
   }
 
-  const completed = req.body?.completed !== undefined ? Boolean(req.body.completed) : true;
+  const completed =
+    req.body?.completed !== undefined ? Boolean(req.body.completed) : true;
   const completionResult = await markRecommendationCompletion({
     plantScanId: linkedScan.plant_scan_id,
     recommendationId: recommendation._id,
@@ -957,7 +1074,7 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
   if (!completionResult?.log) {
     return res.status(404).json({
       success: false,
-      error: 'Recommendation log not found for this scan.',
+      error: "Recommendation log not found for this scan.",
     });
   }
 
@@ -982,13 +1099,13 @@ exports.updateScanRecommendationCompletion = asyncHandler(async (req, res) => {
 exports.markScanHarvested = asyncHandler(async (req, res) => {
   const scan = await Scan.findOne({
     _id: req.params.id,
-    user_id: req.user.id
+    user_id: req.user.id,
   });
 
   if (!scan) {
     return res.status(404).json({
       success: false,
-      error: 'Scan not found'
+      error: "Scan not found",
     });
   }
 
@@ -998,9 +1115,9 @@ exports.markScanHarvested = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: {
-      scan
+      scan,
     },
-    message: 'Scan marked as harvested'
+    message: "Scan marked as harvested",
   });
 });
 
@@ -1010,28 +1127,28 @@ exports.markScanHarvested = asyncHandler(async (req, res) => {
 exports.updateScan = asyncHandler(async (req, res) => {
   let scan = await Scan.findOne({
     _id: req.params.id,
-    user_id: req.user.id
+    user_id: req.user.id,
   });
 
   if (!scan) {
     return res.status(404).json({
       success: false,
-      error: 'Scan not found'
+      error: "Scan not found",
     });
   }
 
   // Only allow updating analysis results and metadata
   const allowedFields = [
-    'yolo_predictions',
-    'visual_features',
-    'analysis_result',
-    'recommendations',
-    'scan_metadata',
-    'self_learning_status'
+    "yolo_predictions",
+    "visual_features",
+    "analysis_result",
+    "recommendations",
+    "scan_metadata",
+    "self_learning_status",
   ];
 
   const updateData = {};
-  allowedFields.forEach(field => {
+  allowedFields.forEach((field) => {
     if (req.body[field] !== undefined) {
       updateData[field] = req.body[field];
     }
@@ -1040,27 +1157,35 @@ exports.updateScan = asyncHandler(async (req, res) => {
   scan = await Scan.findByIdAndUpdate(
     req.params.id,
     { $set: updateData },
-    { new: true, runValidators: true }
-  ).populate('plant_id', 'plant_id location current_status');
+    { new: true, runValidators: true },
+  ).populate("plant_id", "plant_id location current_status");
 
   // Update plant status based on scan results
   if (scan.analysis_result) {
     const plant = await Plant.findById(scan.plant_id._id);
     if (plant) {
-      plant.current_status.health_score = scan.analysis_result.health_score || plant.current_status.health_score;
-      const nextHarvestReady = isHarvestReadyFromStage(scan.analysis_result?.maturity_stage)
-        || Boolean(scan.analysis_result.harvest_ready);
+      plant.current_status.health_score =
+        scan.analysis_result.health_score || plant.current_status.health_score;
+      const nextHarvestReady =
+        isHarvestReadyFromStage(scan.analysis_result?.maturity_stage) ||
+        Boolean(scan.analysis_result.harvest_ready);
       plant.current_status.harvest_ready = nextHarvestReady;
-      plant.current_status.lifecycle_stage = nextHarvestReady ? 'ready' : 'growing';
+      plant.current_status.lifecycle_stage = nextHarvestReady
+        ? "ready"
+        : "growing";
       plant.current_status.primary_condition = normalizePrimaryCondition(
         scan.yolo_predictions[0]?.class,
-        normalizePrimaryCondition(plant.current_status.primary_condition, 'healthy')
+        normalizePrimaryCondition(
+          plant.current_status.primary_condition,
+          "healthy",
+        ),
       );
       plant.current_status.disease_severity = normalizeDiseaseSeverity(
         scan.analysis_result.disease_severity,
-        normalizeDiseaseSeverity(plant.current_status.disease_severity, 'none')
+        normalizeDiseaseSeverity(plant.current_status.disease_severity, "none"),
       );
-      plant.current_status.estimated_days_to_harvest = scan.analysis_result.estimated_days_to_harvest;
+      plant.current_status.estimated_days_to_harvest =
+        scan.analysis_result.estimated_days_to_harvest;
       await plant.save();
     }
   }
@@ -1068,8 +1193,8 @@ exports.updateScan = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: {
-      scan
-    }
+      scan,
+    },
   });
 });
 
@@ -1079,13 +1204,13 @@ exports.updateScan = asyncHandler(async (req, res) => {
 exports.deleteScan = asyncHandler(async (req, res) => {
   const scan = await Scan.findOne({
     _id: req.params.id,
-    user_id: req.user.id
+    user_id: req.user.id,
   });
 
   if (!scan) {
     return res.status(404).json({
       success: false,
-      error: 'Scan not found'
+      error: "Scan not found",
     });
   }
 
@@ -1097,7 +1222,7 @@ exports.deleteScan = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: {},
-    message: 'Scan deleted successfully'
+    message: "Scan deleted successfully",
   });
 });
 
@@ -1113,7 +1238,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
   if (!plant) {
     return res.status(404).json({
       success: false,
-      error: 'Plant not found'
+      error: "Plant not found",
     });
   }
 
@@ -1121,7 +1246,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
 
   const scans = await Scan.find({
     plant_id: plant._id,
-    user_id: req.user.id
+    user_id: req.user.id,
   })
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -1129,7 +1254,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
 
   const total = await Scan.countDocuments({
     plant_id: plant._id,
-    user_id: req.user.id
+    user_id: req.user.id,
   });
 
   res.status(200).json({
@@ -1137,7 +1262,7 @@ exports.getScansByPlant = asyncHandler(async (req, res) => {
     count: scans.length,
     total,
     data: {
-      scans
-    }
+      scans,
+    },
   });
 });

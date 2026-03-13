@@ -105,7 +105,13 @@ def predict():
         yolo_predictions = model_service.predict(image)
         visual_features = preprocessor.extract_features(image)
         age_estimation = age_estimator.estimate(visual_features)
-        confidence_score = calculate_confidence_score(yolo_predictions, visual_features)
+
+        # Run maturity model for combined confidence
+        maturity_result = leaf_maturity_service.detect_leaves(image)
+        maturity_detections = maturity_result.get('detections', [])
+        confidence_score = calculate_confidence_score(
+            yolo_predictions, visual_features, maturity_detections
+        )
 
         processing_time = (time.time() - start_time) * 1000
 
@@ -116,6 +122,11 @@ def predict():
                 'visual_features': visual_features,
                 'age_estimation': age_estimation,
                 'confidence_score': confidence_score,
+                'maturity_prediction': {
+                    'leaf_count': maturity_result.get('leaf_count', 0),
+                    'maturity_stage': maturity_result.get('maturity_stage', ''),
+                    'detection_count': len(maturity_detections),
+                },
                 'processing_time_ms': processing_time
             }
         }), 200
@@ -149,7 +160,13 @@ def predict_batch():
                 yolo_predictions = model_service.predict(image)
                 visual_features = preprocessor.extract_features(image)
                 age_estimation = age_estimator.estimate(visual_features)
-                confidence_score = calculate_confidence_score(yolo_predictions, visual_features)
+
+                # Run maturity model for combined confidence
+                maturity_result = leaf_maturity_service.detect_leaves(image)
+                maturity_detections = maturity_result.get('detections', [])
+                confidence_score = calculate_confidence_score(
+                    yolo_predictions, visual_features, maturity_detections
+                )
 
                 results.append({
                     'filename': image_file.filename,
@@ -158,7 +175,12 @@ def predict_batch():
                         'yolo_predictions': yolo_predictions,
                         'visual_features': visual_features,
                         'age_estimation': age_estimation,
-                        'confidence_score': confidence_score
+                        'confidence_score': confidence_score,
+                        'maturity_prediction': {
+                            'leaf_count': maturity_result.get('leaf_count', 0),
+                            'maturity_stage': maturity_result.get('maturity_stage', ''),
+                            'detection_count': len(maturity_detections),
+                        },
                     }
                 })
             except Exception as exc:
