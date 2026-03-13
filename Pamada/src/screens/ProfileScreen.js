@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -58,6 +58,18 @@ export default function ProfileScreen() {
   const diseases = getDiseaseDistribution(analytics, [
     { name: 'No active disease signals', percentage: 0, color: palette.status.success },
   ]);
+  const hasAnalytics = Number(analytics?.totalPlants || 0) > 0;
+
+  const buildChartBars = useCallback((value = 0) => {
+    const normalized = Math.min(Math.max(Number(value) || 0, 0), 100);
+    const base = 6;
+    const max = 34;
+    const multipliers = [0.3, 0.45, 0.6, 0.8, 1];
+    return multipliers.map((multiplier, index) => ({
+      key: `${index}-${normalized}`,
+      height: Math.round(base + (max - base) * Math.min(1, (normalized / 100) * multiplier)),
+    }));
+  }, []);
 
   const parsePercent = (value) => {
     if (typeof value === 'number') return value;
@@ -250,6 +262,12 @@ export default function ProfileScreen() {
     }
   }, [refreshAll]);
 
+  useFocusEffect(
+    useCallback(() => {
+      refreshAll().catch(() => {});
+    }, [refreshAll])
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -338,6 +356,14 @@ export default function ProfileScreen() {
                 <Text style={[styles.exportButtonText, { color: palette.text.primary }]}>Export</Text>
               </TouchableOpacity>
             </View>
+            {!hasAnalytics ? (
+              <View style={[styles.analyticsEmpty, { borderColor: palette.surface.border }]}>
+                <Ionicons name="analytics-outline" size={18} color={palette.text.secondary} />
+                <Text style={[styles.analyticsEmptyText, { color: palette.text.secondary }]}>
+                  No analytics yet. Run scans to populate plant library stats.
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.metricsGrid}>
               {metrics.map((metric) => (
                 <View
@@ -356,16 +382,19 @@ export default function ProfileScreen() {
                     <Text style={[styles.metricLabel, { color: palette.text.secondary }]}>{metric.label}</Text>
                   </View>
                   <Text style={[styles.metricValue, { color: palette.text.primary }]}>{Math.round(metric.value)}%</Text>
-                  <View style={[styles.metricTrack, { backgroundColor: palette.surface.soft }]}>
-                    <View
-                      style={[
-                        styles.metricFill,
-                        {
-                          width: `${metric.value}%`,
-                          backgroundColor: metric.tint,
-                        },
-                      ]}
-                    />
+                  <View style={styles.chartRow}>
+                    {buildChartBars(metric.value).map((bar) => (
+                      <View
+                        key={bar.key}
+                        style={[
+                          styles.chartBar,
+                          {
+                            height: bar.height,
+                            backgroundColor: `${metric.tint}CC`,
+                          },
+                        ]}
+                      />
+                    ))}
                   </View>
                 </View>
               ))}
@@ -609,6 +638,20 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.xs,
   },
+  analyticsEmpty: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  analyticsEmptyText: {
+    ...typography.caption,
+    flex: 1,
+  },
   metricTile: {
     borderWidth: 1,
     borderRadius: radius.md,
@@ -628,15 +671,17 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     marginTop: spacing.xs,
   },
-  metricTrack: {
-    height: 6,
-    borderRadius: 99,
-    overflow: 'hidden',
+  chartRow: {
     marginTop: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+    height: 38,
   },
-  metricFill: {
-    height: '100%',
-    borderRadius: 99,
+  chartBar: {
+    width: 8,
+    borderRadius: 6,
+    backgroundColor: '#000000',
   },
   distributionList: {
     gap: spacing.sm,

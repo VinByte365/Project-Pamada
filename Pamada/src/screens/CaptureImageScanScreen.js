@@ -102,12 +102,13 @@ export default function CaptureImageScanScreen() {
     const structuredRecommendations = Array.isArray(scan?.recommendation_payload?.recommendations)
       ? scan.recommendation_payload.recommendations
       : [];
-    const confidenceScore = noPlantDetected
-      ? 0
-      : Number(scan?.recommendation_payload?.confidence ?? scan?.analysis_result?.confidence_score ?? 0);
+    const rawConfidence = Number(
+      scan?.recommendation_payload?.confidence ?? scan?.analysis_result?.confidence_score ?? 0
+    );
+    const confidenceScore = Number.isFinite(rawConfidence) ? rawConfidence : 0;
     const belowThreshold = confidenceScore > 0 && confidenceScore < CONFIDENCE_THRESHOLD;
     const invalidPlant = noPlantDetected || belowThreshold;
-    const confidence = noPlantDetected ? 'N/A' : (confidenceScore ? `${Math.round(confidenceScore * 100)}%` : 'N/A');
+    const confidence = `${Math.round(confidenceScore * 100)}%`;
 
     return {
       maturity,
@@ -122,7 +123,7 @@ export default function CaptureImageScanScreen() {
             ? structuredRecommendations.map((item) => item.text)
             : ['No preset recommendations configured for this disease key.']),
       confidence,
-      confidenceNumber: confidenceScore ? Math.round(confidenceScore * 100) : 0,
+      confidenceNumber: Math.round(confidenceScore * 100),
     };
   };
 

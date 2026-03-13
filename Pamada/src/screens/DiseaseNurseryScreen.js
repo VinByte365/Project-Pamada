@@ -293,7 +293,7 @@ export default function DiseaseNurseryScreen() {
             )}
           </ElevatedCard>
 
-          <ElevatedCard style={[styles.sectionCard, { borderColor: palette.surface.border }]}>
+          {/* <ElevatedCard style={[styles.sectionCard, { borderColor: palette.surface.border }]}>
             <View style={styles.sectionHead}>
               <Text style={[styles.sectionTitle, { color: palette.text.primary }]}>Aloe Disease Nursery</Text>
               <View style={[styles.sectionPill, { backgroundColor: palette.surface.soft, borderColor: palette.surface.border }]}>
@@ -342,7 +342,7 @@ export default function DiseaseNurseryScreen() {
                 </View>
               ))}
             </View>
-          </ElevatedCard>
+          </ElevatedCard> */}
         </ScrollView>
       )}
     </SafeAreaView>

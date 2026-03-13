@@ -10,56 +10,36 @@ This document provides a schema-level view of the database models that are activ
 
 This diagram is based on [docs/ModelUsage.md](/e:/MELVIN%20FOLDER/Aloe%20Vera/docs/ModelUsage.md) and focuses on document relationships, ownership, and the main references between collections.
 
-## Mermaid ER Diagram
+## Mermaid ER Diagrams (Split for Readability)
+
+### Core Scan + Recommendation Flow
 
 ```mermaid
 erDiagram
     USER {
         ObjectId _id
         string email
-        string password_hash
         string full_name
-        string role
-        string phone
-        boolean is_active
-        date last_login
-        object profile_image
-        object cover_image
         object preferences
         date createdAt
-        date updatedAt
     }
 
     PLANT {
         ObjectId _id
         string plant_id
         ObjectId owner_id
-        date planting_date
-        object location
         object current_status
-        object metadata
         date createdAt
-        date updatedAt
     }
 
     SCAN {
         ObjectId _id
-        string scan_id
-        number scan_number
         ObjectId plant_id
         ObjectId user_id
-        ObjectId disease_id
         ObjectId plant_scan_id
         string disease_key
-        object image_data
-        array yolo_predictions
-        object visual_features
         object analysis_result
-        object recommendations
-        object scan_metadata
-        object self_learning_status
         date createdAt
-        date updatedAt
     }
 
     PLANT_SCAN {
@@ -70,20 +50,12 @@ erDiagram
         number confidence
         string severity
         date scanned_at
-        ObjectId legacy_scan_id
-        boolean care_plan_completed
-        date care_plan_completed_at
-        date createdAt
-        date updatedAt
     }
 
     DISEASE {
         ObjectId _id
         string disease_key
         string display_name
-        string description
-        date createdAt
-        date updatedAt
     }
 
     RECOMMENDATION {
@@ -92,8 +64,6 @@ erDiagram
         string recommendation_text
         string priority
         boolean is_required
-        date createdAt
-        date updatedAt
     }
 
     RECOMMENDATION_LOG {
@@ -102,119 +72,6 @@ erDiagram
         ObjectId recommendation_id
         boolean completed
         date completed_at
-        date createdAt
-        date updatedAt
-    }
-
-    DISEASE_KNOWLEDGE {
-        ObjectId _id
-        string disease_name
-        string display_name
-        string description
-        array symptoms
-        array causes
-        object severity_levels
-        array preventive_measures
-        number estimated_recovery_days
-        array references
-        date createdAt
-        date updatedAt
-    }
-
-    ANALYTICS {
-        ObjectId _id
-        date date
-        ObjectId user_id
-        object metrics
-        object model_performance
-        object forecasting
-        date createdAt
-        date updatedAt
-    }
-
-    SUPPORT_TICKET {
-        ObjectId _id
-        string ticket_number
-        ObjectId user_id
-        string full_name
-        string email
-        string mobile_unit
-        string os_version
-        string issue_category
-        string description
-        object issue_image
-        string status
-        date createdAt
-        date updatedAt
-    }
-
-    COMMUNITY_POST {
-        ObjectId _id
-        ObjectId user_id
-        string content
-        string media_url
-        string media_type
-        string media_public_id
-        date createdAt
-        date updatedAt
-    }
-
-    COMMUNITY_COMMENT {
-        ObjectId _id
-        ObjectId post_id
-        ObjectId parent_comment_id
-        ObjectId user_id
-        string content
-        date createdAt
-        date updatedAt
-    }
-
-    COMMUNITY_LIKE {
-        ObjectId _id
-        ObjectId post_id
-        ObjectId user_id
-        date createdAt
-        date updatedAt
-    }
-
-    COMMUNITY_COMMENT_LIKE {
-        ObjectId _id
-        ObjectId post_id
-        ObjectId comment_id
-        ObjectId user_id
-        date createdAt
-        date updatedAt
-    }
-
-    MESSAGE {
-        ObjectId _id
-        ObjectId sender_id
-        ObjectId receiver_id
-        string content
-        boolean read_status
-        array hidden_for
-        date createdAt
-        date updatedAt
-    }
-
-    MESSAGE_THREAD_PREFERENCE {
-        ObjectId _id
-        ObjectId user_id
-        ObjectId counterpart_id
-        boolean muted
-        date createdAt
-        date updatedAt
-    }
-
-    NOTIFICATION {
-        ObjectId _id
-        ObjectId user_id
-        string type
-        string reference_id
-        string message
-        boolean is_read
-        date createdAt
-        date updatedAt
     }
 
     USER ||--o{ PLANT : owns
@@ -229,9 +86,45 @@ erDiagram
     DISEASE ||--o{ RECOMMENDATION : defines
     PLANT_SCAN ||--o{ RECOMMENDATION_LOG : tracks
     RECOMMENDATION ||--o{ RECOMMENDATION_LOG : logged_as
+```
 
-    USER ||--o{ ANALYTICS : summarized_for
-    USER ||--o{ SUPPORT_TICKET : submits
+### Community + Social Layer
+
+```mermaid
+erDiagram
+    USER {
+        ObjectId _id
+        string full_name
+    }
+
+    COMMUNITY_POST {
+        ObjectId _id
+        ObjectId user_id
+        string content
+        string media_url
+        date createdAt
+    }
+
+    COMMUNITY_COMMENT {
+        ObjectId _id
+        ObjectId post_id
+        ObjectId parent_comment_id
+        ObjectId user_id
+        string content
+    }
+
+    COMMUNITY_LIKE {
+        ObjectId _id
+        ObjectId post_id
+        ObjectId user_id
+    }
+
+    COMMUNITY_COMMENT_LIKE {
+        ObjectId _id
+        ObjectId post_id
+        ObjectId comment_id
+        ObjectId user_id
+    }
 
     USER ||--o{ COMMUNITY_POST : authors
     COMMUNITY_POST ||--o{ COMMUNITY_COMMENT : contains
@@ -244,6 +137,61 @@ erDiagram
     USER ||--o{ COMMUNITY_COMMENT_LIKE : gives
     COMMUNITY_COMMENT ||--o{ COMMUNITY_COMMENT_LIKE : receives
     COMMUNITY_POST ||--o{ COMMUNITY_COMMENT_LIKE : scoped_to
+```
+
+### Messaging + Notifications + Analytics
+
+```mermaid
+erDiagram
+    USER {
+        ObjectId _id
+        string full_name
+    }
+
+    MESSAGE {
+        ObjectId _id
+        ObjectId sender_id
+        ObjectId receiver_id
+        string content
+        date createdAt
+    }
+
+    MESSAGE_THREAD_PREFERENCE {
+        ObjectId _id
+        ObjectId user_id
+        ObjectId counterpart_id
+        boolean muted
+    }
+
+    NOTIFICATION {
+        ObjectId _id
+        ObjectId user_id
+        string type
+        string message
+        boolean is_read
+    }
+
+    ANALYTICS {
+        ObjectId _id
+        date date
+        ObjectId user_id
+        object metrics
+    }
+
+    SUPPORT_TICKET {
+        ObjectId _id
+        ObjectId user_id
+        string issue_category
+        string description
+        string status
+    }
+
+    DISEASE_KNOWLEDGE {
+        ObjectId _id
+        string disease_name
+        string display_name
+        string description
+    }
 
     USER ||--o{ MESSAGE : sends
     USER ||--o{ MESSAGE : receives
@@ -252,6 +200,8 @@ erDiagram
     USER ||--o{ MESSAGE_THREAD_PREFERENCE : configures_for
 
     USER ||--o{ NOTIFICATION : receives
+    USER ||--o{ ANALYTICS : summarized_for
+    USER ||--o{ SUPPORT_TICKET : submits
 ```
 
 ## Reading guide
